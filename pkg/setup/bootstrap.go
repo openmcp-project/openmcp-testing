@@ -76,8 +76,7 @@ func (s *OpenMCPSetup) cleanup() types.EnvFunc {
 func (s *OpenMCPSetup) verifyEnvironment() types.EnvFunc {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		klog.Info("verify environment...")
-		return ctx, providers.ClusterReady(ctx, c, apimachinerytypes.NamespacedName{Namespace: s.Namespace, Name: "onboarding"},
-			wait.WithTimeout(time.Minute))
+		return ctx, providers.ClustersReady(ctx, c, wait.WithTimeout(time.Minute))
 	}
 }
 

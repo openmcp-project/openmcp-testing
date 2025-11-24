@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/christophrj/openmcp-testing/internal"
 	"github.com/christophrj/openmcp-testing/pkg/clusterutils"
@@ -59,6 +60,16 @@ func mcpRef(ref types.NamespacedName) *unstructured.Unstructured {
 	})
 }
 
+func clusterRefList() *unstructured.UnstructuredList {
+	list := &unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "clusters.openmcp.cloud",
+		Version: "v1alpha1",
+		Kind:    "cluster",
+	})
+	return list
+}
+
 func clusterRef(ref types.NamespacedName) *unstructured.Unstructured {
 	return internal.UnstructuredRef(ref.Name, ref.Namespace, schema.GroupVersionKind{
 		Group:   "clusters.openmcp.cloud",
@@ -108,6 +119,9 @@ func CreateMCP(name string, opts ...wait.Option) features.Func {
 		if err := wait.For(conditions.Status(obj, onboardingCfg, "phase", "Ready"), opts...); err != nil {
 			t.Errorf("MCP failed to get ready: %v", err)
 		}
+		if err := ClustersReady(ctx, c, wait.WithTimeout(time.Minute)); err != nil {
+			t.Errorf("MCP cluster failed to get ready: %v", err)
+		}
 		return ctx
 	}
 }
@@ -134,12 +148,12 @@ func DeleteMCP(name string, opts ...wait.Option) features.Func {
 	}
 }
 
-// ClusterReady returns true if the referenced cluster object is ready
-func ClusterReady(ctx context.Context, c *envconf.Config, ref types.NamespacedName, options ...wait.Option) error {
-	if err := wait.For(conditions.Match(clusterRef(ref), c, "Ready", corev1.ConditionTrue), options...); err != nil {
+// ClustersReady returns true if all cluster objects are ready
+func ClustersReady(ctx context.Context, c *envconf.Config, options ...wait.Option) error {
+	if err := wait.For(conditions.MatchList(clusterRefList(), c, "Ready", corev1.ConditionTrue), options...); err != nil {
 		return err
 	}
-	klog.Infof("cluster ready: %s", ref)
+	klog.Infof("all clusters ready")
 	return nil
 }
 

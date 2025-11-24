@@ -26,6 +26,23 @@ func Match(obj k8s.Object, cfg *envconf.Config, conditionType string, conditionS
 	}
 }
 
+// MatchList does the same as Match but for each object of a ObjectList
+func MatchList(obj *unstructured.UnstructuredList, cfg *envconf.Config, conditionType string, conditionStatus v1.ConditionStatus) wait.ConditionWithContextFunc {
+	return func(ctx context.Context) (done bool, err error) {
+		err = cfg.Client().Resources().List(ctx, obj)
+		if err != nil {
+			return false, internal.IgnoreNotFound(err)
+		}
+		for _, o := range obj.Items {
+			if !checkCondition(&o, conditionType, conditionStatus) {
+				return false, nil
+			}
+		}
+		// all objects match
+		return true, nil
+	}
+}
+
 // Status returns true if the status key of an object matches the status value.
 // If an object is not found, the condition is not satisfied and no error is returned.
 func Status(obj k8s.Object, cfg *envconf.Config, key string, value string) wait.ConditionWithContextFunc {
