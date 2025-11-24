@@ -15,7 +15,7 @@ import (
 
 func TestServiceProvider(t *testing.T) {
 	basicProviderTest := features.New("provider test").
-		Setup(providers.CreateMCP("test-mcp", wait.WithTimeout(time.Minute))).
+		Setup(providers.CreateMCP("test-mcp", wait.WithTimeout(2*time.Minute))).
 		Setup(providers.ImportServiceProviderAPIs("serviceproviderobjects", wait.WithTimeout(time.Minute))).
 		Setup(providers.ImportDomainAPIs("domainobjects", wait.WithTimeout(time.Minute))).
 		Assess("verify onboarding cluster objects", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {

@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/christophrj/openmcp-testing/internal"
 	"github.com/christophrj/openmcp-testing/pkg/clusterutils"
@@ -119,7 +118,7 @@ func CreateMCP(name string, opts ...wait.Option) features.Func {
 		if err := wait.For(conditions.Status(obj, onboardingCfg, "phase", "Ready"), opts...); err != nil {
 			t.Errorf("MCP failed to get ready: %v", err)
 		}
-		if err := ClustersReady(ctx, c, wait.WithTimeout(time.Minute)); err != nil {
+		if err := ClustersReady(ctx, c, opts...); err != nil {
 			t.Errorf("MCP cluster failed to get ready: %v", err)
 		}
 		return ctx
