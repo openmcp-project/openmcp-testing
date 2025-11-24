@@ -7,7 +7,7 @@ import (
 
 	"github.com/openmcp-project/openmcp-testing/pkg/clusterutils"
 	"github.com/openmcp-project/openmcp-testing/pkg/providers"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/features"
@@ -41,8 +41,8 @@ func TestServiceProvider(t *testing.T) {
 }
 
 func assertDummyConfigMap(ctx context.Context, t *testing.T, cfg *envconf.Config) {
-	cm := &v1.ConfigMap{}
-	if err := cfg.Client().Resources().Get(ctx, "dummy", v1.NamespaceDefault, cm); err != nil {
+	cm := &corev1.ConfigMap{}
+	if err := cfg.Client().Resources().Get(ctx, "dummy", corev1.NamespaceDefault, cm); err != nil {
 		t.Error(err)
 		return
 	}

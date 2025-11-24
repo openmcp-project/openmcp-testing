@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/openmcp-project/openmcp-testing/internal"
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
@@ -15,7 +15,7 @@ import (
 
 // Match returns true if the conditionType of an object matches the conditionStatus.
 // If an object is not found, the condition is not satisfied and no error is returned.
-func Match(obj k8s.Object, cfg *envconf.Config, conditionType string, conditionStatus v1.ConditionStatus) wait.ConditionWithContextFunc {
+func Match(obj k8s.Object, cfg *envconf.Config, conditionType string, conditionStatus corev1.ConditionStatus) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (done bool, err error) {
 		klog.Infof("%s: waiting for condition %s %s", fmtObj(obj), conditionType, conditionStatus)
 		err = cfg.Client().Resources().Get(ctx, obj.GetName(), obj.GetNamespace(), obj)
@@ -27,7 +27,7 @@ func Match(obj k8s.Object, cfg *envconf.Config, conditionType string, conditionS
 }
 
 // MatchList does the same as Match but for each object of a ObjectList
-func MatchList(obj *unstructured.UnstructuredList, cfg *envconf.Config, conditionType string, conditionStatus v1.ConditionStatus) wait.ConditionWithContextFunc {
+func MatchList(obj *unstructured.UnstructuredList, cfg *envconf.Config, conditionType string, conditionStatus corev1.ConditionStatus) wait.ConditionWithContextFunc {
 	return func(ctx context.Context) (done bool, err error) {
 		err = cfg.Client().Resources().List(ctx, obj)
 		if err != nil {
@@ -67,7 +67,7 @@ func Status(obj k8s.Object, cfg *envconf.Config, key string, value string) wait.
 	}
 }
 
-func checkCondition(k8sobj k8s.Object, desiredType string, desiredStatus v1.ConditionStatus) bool {
+func checkCondition(k8sobj k8s.Object, desiredType string, desiredStatus corev1.ConditionStatus) bool {
 	fmtobj := fmtObj(k8sobj)
 	u, err := internal.ToUnstructured(k8sobj)
 	if err != nil {
