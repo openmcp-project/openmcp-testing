@@ -3,7 +3,6 @@ package providers
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/christophrj/openmcp-testing/internal"
 	"github.com/christophrj/openmcp-testing/pkg/clusterutils"
@@ -93,7 +92,7 @@ func DeleteClusterProvider(ctx context.Context, c *envconf.Config, name string, 
 }
 
 // CreateMCP creates an MCP object on the onboarding cluster and waits until it is ready
-func CreateMCP(name string, timeout time.Duration) features.Func {
+func CreateMCP(name string, opts ...wait.Option) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		klog.Infof("create MCP: %s", name)
 		onboardingCfg, err := clusterutils.OnboardingConfig()
@@ -106,10 +105,7 @@ func CreateMCP(name string, timeout time.Duration) features.Func {
 			t.Errorf("failed to create MCP: %v", err)
 			return ctx
 		}
-		if err := wait.For(
-			conditions.Status(obj, onboardingCfg, "phase", "Ready"),
-			wait.WithTimeout(timeout),
-		); err != nil {
+		if err := wait.For(conditions.Status(obj, onboardingCfg, "phase", "Ready"), opts...); err != nil {
 			t.Errorf("MCP failed to get ready: %v", err)
 		}
 		return ctx
