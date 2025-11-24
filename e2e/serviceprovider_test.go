@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/christophrj/openmcp-testing/pkg/clusterutils"
-	"github.com/christophrj/openmcp-testing/pkg/providers"
+	"github.com/openmcp-project/openmcp-testing/pkg/clusterutils"
+	"github.com/openmcp-project/openmcp-testing/pkg/providers"
 	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"

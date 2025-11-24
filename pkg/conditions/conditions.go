@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/christophrj/openmcp-testing/internal"
+	"github.com/openmcp-project/openmcp-testing/internal"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/wait"

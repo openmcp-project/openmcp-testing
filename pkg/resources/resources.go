@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/christophrj/openmcp-testing/internal"
+	"github.com/openmcp-project/openmcp-testing/internal"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/decoder"

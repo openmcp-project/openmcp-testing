@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/christophrj/openmcp-testing/pkg/providers"
-	"github.com/christophrj/openmcp-testing/pkg/setup"
+	"github.com/openmcp-project/openmcp-testing/pkg/providers"
+	"github.com/openmcp-project/openmcp-testing/pkg/setup"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/pkg/env"

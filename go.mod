@@ -1,4 +1,4 @@
-module github.com/christophrj/openmcp-testing
+module github.com/openmcp-project/openmcp-testing
 
 go 1.25.2
 

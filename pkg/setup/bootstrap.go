@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/christophrj/openmcp-testing/pkg/providers"
-	"github.com/christophrj/openmcp-testing/pkg/resources"
+	"github.com/openmcp-project/openmcp-testing/pkg/providers"
+	"github.com/openmcp-project/openmcp-testing/pkg/resources"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/wait"

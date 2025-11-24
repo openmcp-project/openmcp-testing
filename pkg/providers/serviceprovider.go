@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/christophrj/openmcp-testing/pkg/clusterutils"
-	"github.com/christophrj/openmcp-testing/pkg/conditions"
-	"github.com/christophrj/openmcp-testing/pkg/resources"
+	"github.com/openmcp-project/openmcp-testing/pkg/clusterutils"
+	"github.com/openmcp-project/openmcp-testing/pkg/conditions"
+	"github.com/openmcp-project/openmcp-testing/pkg/resources"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
