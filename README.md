@@ -4,17 +4,28 @@
 
 ## About this project
 
-Testing framework for openMCP
+OpenMCP-testing helps to set up e2e test suites for openmcp applications. Like [xp-testing](https://github.com/crossplane-contrib/xp-testing) but for [openmcp](https://github.com/openmcp-project).
+
+* [`pkg/clusterutils`](./pkg/clusterutils/) provides functionality to interact with the different clusters of an openMCP installation
+* [`pkg/conditions`](./pkg/conditions/) provides common pre/post condition checks
+* [`pkg/providers`](./pkg/providers/) provides functionality to test cluster-providers, platform-services and service-providers
+* [`pkg/resources`](./pkg/resources/) provides functionality to (batch) import and delete resources
+* [`pkg/setup`](./pkg/setup/) provides functionality to bootstrap an openmcp environment
 
 ## Requirements and Setup
 
-*Insert a short description what is required to get your project running...*
+You need [go](https://go.dev/) and [docker](https://www.docker.com/) to execute the sample test suite.
+
+```shell
+    go test -v ./e2e/...
+```
 
 ## Support, Feedback, Contributing
 
 This project is open to feature requests/suggestions, bug reports etc. via [GitHub issues](https://github.com/openmcp-project/openmcp-testing/issues). Contribution and feedback are encouraged and always welcome. For more information about how to contribute, the project structure, as well as additional contribution information, see our [Contribution Guidelines](CONTRIBUTING.md).
 
 ## Security / Disclosure
+
 If you find any bug that may be a security problem, please follow our instructions at [in our security policy](https://github.com/openmcp-project/openmcp-testing/security/policy) on how to report it. Please do not create GitHub issues for security-related doubts or problems.
 
 ## Code of Conduct
