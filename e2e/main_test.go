@@ -23,7 +23,7 @@ func TestMain(m *testing.M) {
 		Namespace: "openmcp-system",
 		Operator: setup.OpenMCPOperatorSetup{
 			Name:         "openmcp-operator",
-			Image:        "ghcr.io/openmcp-project/images/openmcp-operator:v0.13.0",
+			Image:        "ghcr.io/openmcp-project/images/openmcp-operator:v0.17.1",
 			Environment:  "debug",
 			PlatformName: "platform",
 		},
@@ -39,7 +39,7 @@ func TestMain(m *testing.M) {
 		ServiceProviders: []providers.ServiceProviderSetup{
 			{
 				Name:  "crossplane",
-				Image: "ghcr.io/openmcp-project/images/service-provider-crossplane:v0.0.4",
+				Image: "ghcr.io/openmcp-project/images/service-provider-crossplane:v0.1.4",
 				Opts: []wait.Option{
 					wait.WithTimeout(time.Minute),
 				},
