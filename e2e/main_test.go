@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openmcp-project/openmcp-testing/pkg/providers"
-	"github.com/openmcp-project/openmcp-testing/pkg/setup"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
+
+	"github.com/openmcp-project/openmcp-testing/pkg/providers"
+	"github.com/openmcp-project/openmcp-testing/pkg/setup"
 )
 
 var testenv env.Environment
