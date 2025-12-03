@@ -1,6 +1,6 @@
 module github.com/openmcp-project/openmcp-testing
 
-go 1.25.2
+go 1.25.5
 
 require (
 	k8s.io/api v0.34.2
