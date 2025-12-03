@@ -5,7 +5,5 @@ includes:
     taskfile: hack/common/Taskfile_library.yaml
     flatten: true
     vars:
-      CODE_DIRS: '{{.ROOT_DIR}}/internal/... {{.ROOT_DIR}}/pkg/... {{.ROOT_DIR}}/e2e/...'
-      REPO_URL: 'https://github.com/openmcp-project/openmcp-testing'
-
-# TODO: overwirte task test to run e2e with verbosity
+      CODE_DIRS: "{{.ROOT_DIR}}/internal/... {{.ROOT_DIR}}/pkg/..."
+      REPO_URL: "https://github.com/openmcp-project/openmcp-testing"
