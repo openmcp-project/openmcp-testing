@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/openmcp-project/openmcp-testing/internal"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/k8s"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
+
+	"github.com/openmcp-project/openmcp-testing/internal"
 )
 
 // Match returns true if the conditionType of an object matches the conditionStatus.

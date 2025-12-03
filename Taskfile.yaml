@@ -1,0 +1,9 @@
+version: 3
+
+includes:
+  shared:
+    taskfile: hack/common/Taskfile_library.yaml
+    flatten: true
+    vars:
+      CODE_DIRS: "{{.ROOT_DIR}}/internal/... {{.ROOT_DIR}}/pkg/..."
+      REPO_URL: "https://github.com/openmcp-project/openmcp-testing"

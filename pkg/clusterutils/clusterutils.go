@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/openmcp-project/openmcp-testing/pkg/resources"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/tools/clientcmd"
@@ -14,6 +13,8 @@ import (
 	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/kind/pkg/cluster"
+
+	"github.com/openmcp-project/openmcp-testing/pkg/resources"
 )
 
 // ConfigByPrefix returns an environment Config with the passed in namespace and
