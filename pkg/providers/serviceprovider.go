@@ -28,9 +28,9 @@ spec:
 
 // ServiceProviderSetup represents the configuration parameters to set up a service provider
 type ServiceProviderSetup struct {
-	Name  string
-	Image string
-	Opts  []wait.Option
+	Name     string
+	Image    string
+	WaitOpts []wait.Option
 }
 
 func serviceProviderRef(name string) *unstructured.Unstructured {
@@ -51,7 +51,7 @@ func InstallServiceProvider(ctx context.Context, c *envconf.Config, sp ServicePr
 	if err != nil {
 		return err
 	}
-	return wait.For(conditions.Match(obj, c, "Ready", corev1.ConditionTrue), sp.Opts...)
+	return wait.For(conditions.Match(obj, c, "Ready", corev1.ConditionTrue), sp.WaitOpts...)
 }
 
 // ImportServiceProviderAPIs iterates over each resource from the passed in directory

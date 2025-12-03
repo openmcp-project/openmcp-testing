@@ -47,9 +47,9 @@ spec:
 
 // ClusterProviderSetup represents the configuration parameters to set up a cluster provider
 type ClusterProviderSetup struct {
-	Name  string
-	Image string
-	Opts  []wait.Option
+	Name     string
+	Image    string
+	WaitOpts []wait.Option
 }
 
 func mcpRef(ref types.NamespacedName) *unstructured.Unstructured {
@@ -93,7 +93,7 @@ func InstallClusterProvider(ctx context.Context, c *envconf.Config, clusterProvi
 	if err != nil {
 		return err
 	}
-	return wait.For(conditions.Match(obj, c, "Ready", corev1.ConditionTrue), clusterProvider.Opts...)
+	return wait.For(conditions.Match(obj, c, "Ready", corev1.ConditionTrue), clusterProvider.WaitOpts...)
 }
 
 // DeleteClusterProvider deletes the cluster provider object and waits until the object has been deleted
