@@ -2,7 +2,6 @@ package setup
 
 import (
 	"context"
-	"time"
 
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -23,6 +22,7 @@ type OpenMCPSetup struct {
 	Operator         OpenMCPOperatorSetup
 	ClusterProviders []providers.ClusterProviderSetup
 	ServiceProviders []providers.ServiceProviderSetup
+	WaitOpts         []wait.Option
 }
 
 type OpenMCPOperatorSetup struct {
@@ -31,6 +31,7 @@ type OpenMCPOperatorSetup struct {
 	Image        string
 	Environment  string
 	PlatformName string
+	WaitOpts     []wait.Option
 }
 
 // Bootstrap sets up a the minimum set of components of an openMCP installation
@@ -57,16 +58,16 @@ func (s *OpenMCPSetup) cleanup() types.EnvFunc {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		klog.Info("cleaning up environment...")
 		for _, sp := range s.ServiceProviders {
-			if err := providers.DeleteServiceProvider(ctx, c, sp.Name, wait.WithTimeout(time.Minute)); err != nil {
+			if err := providers.DeleteServiceProvider(ctx, c, sp.Name, sp.WaitOpts...); err != nil {
 				klog.Errorf("delete service provider failed: %v", err)
 			}
 		}
 		if err := providers.DeleteCluster(ctx, c, apimachinerytypes.NamespacedName{Namespace: s.Namespace, Name: "onboarding"},
-			wait.WithTimeout(time.Second*20)); err != nil {
+			s.WaitOpts...); err != nil {
 			klog.Errorf("delete cluster failed: %v", err)
 		}
 		for _, cp := range s.ClusterProviders {
-			if err := providers.DeleteClusterProvider(ctx, c, cp.Name, wait.WithTimeout(time.Minute)); err != nil {
+			if err := providers.DeleteClusterProvider(ctx, c, cp.Name, cp.WaitOpts...); err != nil {
 				klog.Errorf("delete cluster provider failed: %v", err)
 			}
 		}
@@ -77,7 +78,7 @@ func (s *OpenMCPSetup) cleanup() types.EnvFunc {
 func (s *OpenMCPSetup) verifyEnvironment() types.EnvFunc {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		klog.Info("verify environment...")
-		return ctx, providers.ClustersReady(ctx, c, wait.WithTimeout(time.Minute))
+		return ctx, providers.ClustersReady(ctx, c, s.WaitOpts...)
 	}
 }
 
@@ -89,8 +90,7 @@ func (s *OpenMCPSetup) installOpenMCPOperator() types.EnvFunc {
 		}
 		// wait for deployment to be ready
 		if err := wait.For(conditions.New(c.Client().Resources()).
-			DeploymentAvailable(s.Operator.Name, s.Operator.Namespace),
-			wait.WithTimeout(time.Minute)); err != nil {
+			DeploymentAvailable(s.Operator.Name, s.Operator.Namespace), s.Operator.WaitOpts...); err != nil {
 			return ctx, err
 		}
 		klog.Info("openmcp operator ready")
