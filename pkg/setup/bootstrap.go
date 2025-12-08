@@ -36,13 +36,13 @@ type OpenMCPOperatorSetup struct {
 
 // Bootstrap sets up a the minimum set of components of an openMCP installation
 func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) error {
-	platformClusterName := envconf.RandomName("platform-", 16)
+	platformClusterName := envconf.RandomName("platform", 16)
 	s.Operator.Namespace = s.Namespace
 	testenv.Setup(createPlatformCluster(platformClusterName)).
 		Setup(envfuncs.CreateNamespace(s.Namespace)).
 		Setup(s.installOpenMCPOperator()).
-		Setup(s.loadServiceProviderImages(platformClusterName)).
 		Setup(s.installClusterProviders()).
+		Setup(s.loadServiceProviderImages(platformClusterName)).
 		Setup(s.installServiceProviders()).
 		Setup(s.verifyEnvironment()).
 		Finish(s.cleanup()).
@@ -86,7 +86,7 @@ func (s *OpenMCPSetup) verifyEnvironment() types.EnvFunc {
 func (s *OpenMCPSetup) installOpenMCPOperator() types.EnvFunc {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		// apply openmcp operator manifests
-		if _, err := resources.CreateObjectsFromTemplateFile(ctx, c, "../pkg/setup/templates/openmcp-operator.yaml", s.Operator); err != nil {
+		if _, err := resources.CreateObjectsFromTemplateFile(ctx, c, "../pkg/setup/templates/openmcp-operator.yaml.tmpl", s.Operator); err != nil {
 			return ctx, err
 		}
 		// wait for deployment to be ready
