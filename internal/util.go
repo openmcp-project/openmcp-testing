@@ -1,8 +1,11 @@
 package internal
 
 import (
+	"embed"
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"text/template"
 
@@ -65,4 +68,23 @@ func UnstructuredRef(name string, namespace string, gvk schema.GroupVersionKind)
 	obj.SetNamespace(namespace)
 	obj.SetGroupVersionKind(gvk)
 	return obj
+}
+
+// MustTmpFileFromEmbedFS creates a temporary file from an embedded file and returns the file path
+func MustTmpFileFromEmbedFS(fs embed.FS, path string) string {
+	data, err := fs.ReadFile(path)
+	if err != nil {
+		panic(err)
+	}
+	file := filepath.Base(path)
+	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("%s-*", file))
+	if err != nil {
+		panic(err)
+	}
+	tmpPath := filepath.Join(tmpDir, file)
+	var userRW os.FileMode = 0o600
+	if err := os.WriteFile(tmpPath, data, userRW); err != nil {
+		panic(err)
+	}
+	return tmpPath
 }
