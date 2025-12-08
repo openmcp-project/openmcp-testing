@@ -36,11 +36,12 @@ type OpenMCPOperatorSetup struct {
 
 // Bootstrap sets up a the minimum set of components of an openMCP installation
 func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) error {
-	platformClusterName := envconf.RandomName("platform-cluster", 16)
+	platformClusterName := envconf.RandomName("platform-", 16)
 	s.Operator.Namespace = s.Namespace
 	testenv.Setup(createPlatformCluster(platformClusterName)).
 		Setup(envfuncs.CreateNamespace(s.Namespace)).
 		Setup(s.installOpenMCPOperator()).
+		Setup(s.loadServiceProviderImages(platformClusterName)).
 		Setup(s.installClusterProviders()).
 		Setup(s.installServiceProviders()).
 		Setup(s.verifyEnvironment()).
@@ -109,11 +110,31 @@ func (s *OpenMCPSetup) installClusterProviders() env.Func {
 	}
 }
 
-// InstallServiceProvider creates a service provider object on the platform cluster and waits until it is ready
 func (s *OpenMCPSetup) installServiceProviders() env.Func {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		for _, sp := range s.ServiceProviders {
 			if err := providers.InstallServiceProvider(ctx, c, sp); err != nil {
+				return ctx, err
+			}
+		}
+		return ctx, nil
+	}
+}
+
+func (s *OpenMCPSetup) loadServiceProviderImages(platformCluster string) env.Func {
+	funcs := []env.Func{}
+	for _, sp := range s.ServiceProviders {
+		funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, sp.Image))
+	}
+	return Compose(funcs...)
+}
+
+// Compose executes multiple env.Funcs in a row
+func Compose(envfuncs ...env.Func) env.Func {
+	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
+		for _, envfunc := range envfuncs {
+			var err error
+			if ctx, err = envfunc(ctx, cfg); err != nil {
 				return ctx, err
 			}
 		}

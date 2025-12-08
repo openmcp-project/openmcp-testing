@@ -12,12 +12,15 @@ import (
 
 	"github.com/openmcp-project/openmcp-testing/pkg/providers"
 	"github.com/openmcp-project/openmcp-testing/pkg/setup"
+	"github.com/vladimirvivien/gexe"
 )
 
 var testenv env.Environment
 
 func TestMain(m *testing.M) {
 	initLogging()
+	serviceProviderImage := "ghcr.io/openmcp-project/images/service-provider-crossplane:v0.1.4"
+	mustPullImage(serviceProviderImage)
 	openmcp := setup.OpenMCPSetup{
 		Namespace: "openmcp-system",
 		Operator: setup.OpenMCPOperatorSetup{
@@ -35,7 +38,7 @@ func TestMain(m *testing.M) {
 		ServiceProviders: []providers.ServiceProviderSetup{
 			{
 				Name:  "crossplane",
-				Image: "ghcr.io/openmcp-project/images/service-provider-crossplane:v0.1.4",
+				Image: serviceProviderImage,
 			},
 		},
 	}
@@ -52,4 +55,14 @@ func initLogging() {
 		panic(err)
 	}
 	flag.Parse()
+}
+
+func mustPullImage(image string) {
+	klog.Info("Pulling ", image)
+	runner := gexe.New()
+	p := runner.RunProc(fmt.Sprintf("docker pull %s", image))
+	klog.V(4).Info(p.Out())
+	if p.Err() != nil {
+		panic(fmt.Errorf("docker pull %v failed: %w: %s", image, p.Err(), p.Result()))
+	}
 }
