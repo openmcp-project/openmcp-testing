@@ -3,6 +3,7 @@ module github.com/openmcp-project/openmcp-testing
 go 1.25.2
 
 require (
+	github.com/stretchr/testify v1.10.0
 	github.com/vladimirvivien/gexe v0.4.1
 	k8s.io/api v0.34.2
 	k8s.io/apimachinery v0.34.2
@@ -16,6 +17,7 @@ require (
 	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
