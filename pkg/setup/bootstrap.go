@@ -2,6 +2,8 @@ package setup
 
 import (
 	"context"
+	"embed"
+	"os"
 
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -13,9 +15,13 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/types"
 	"sigs.k8s.io/e2e-framework/support/kind"
 
+	"github.com/openmcp-project/openmcp-testing/internal"
 	"github.com/openmcp-project/openmcp-testing/pkg/providers"
 	"github.com/openmcp-project/openmcp-testing/pkg/resources"
 )
+
+//go:embed config/*
+var configFS embed.FS
 
 type OpenMCPSetup struct {
 	Namespace        string
@@ -36,27 +42,33 @@ type OpenMCPOperatorSetup struct {
 
 // Bootstrap sets up a the minimum set of components of an openMCP installation
 func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) error {
-	platformClusterName := envconf.RandomName("platform-cluster", 16)
+	kindConfig := internal.MustTmpFileFromEmbedFS(configFS, "config/kind-config.yaml")
+	operatorTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/operator.yaml.tmpl")
+	platformClusterName := envconf.RandomName("platform", 16)
 	s.Operator.Namespace = s.Namespace
-	testenv.Setup(createPlatformCluster(platformClusterName)).
+	testenv.Setup(createPlatformCluster(platformClusterName, kindConfig)).
 		Setup(envfuncs.CreateNamespace(s.Namespace)).
-		Setup(s.installOpenMCPOperator()).
+		Setup(s.installOpenMCPOperator(operatorTemplate)).
 		Setup(s.installClusterProviders()).
+		Setup(s.loadServiceProviderImages(platformClusterName)).
 		Setup(s.installServiceProviders()).
 		Setup(s.verifyEnvironment()).
-		Finish(s.cleanup()).
+		Finish(s.cleanup(kindConfig, operatorTemplate)).
 		Finish(envfuncs.DestroyCluster(platformClusterName))
 	return nil
 }
 
-func createPlatformCluster(name string) types.EnvFunc {
+func createPlatformCluster(name string, kindConfig string) types.EnvFunc {
 	klog.Info("create platform cluster...")
-	return envfuncs.CreateClusterWithConfig(kind.NewProvider(), name, "../pkg/setup/kind/config.yaml")
+	return envfuncs.CreateClusterWithConfig(kind.NewProvider(), name, kindConfig)
 }
 
-func (s *OpenMCPSetup) cleanup() types.EnvFunc {
+func (s *OpenMCPSetup) cleanup(tmpFiles ...string) types.EnvFunc {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		klog.Info("cleaning up environment...")
+		for _, f := range tmpFiles {
+			os.RemoveAll(f)
+		}
 		for _, sp := range s.ServiceProviders {
 			if err := providers.DeleteServiceProvider(ctx, c, sp.Name, sp.WaitOpts...); err != nil {
 				klog.Errorf("delete service provider failed: %v", err)
@@ -82,10 +94,10 @@ func (s *OpenMCPSetup) verifyEnvironment() types.EnvFunc {
 	}
 }
 
-func (s *OpenMCPSetup) installOpenMCPOperator() types.EnvFunc {
+func (s *OpenMCPSetup) installOpenMCPOperator(tmpl string) types.EnvFunc {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		// apply openmcp operator manifests
-		if _, err := resources.CreateObjectsFromTemplateFile(ctx, c, "../pkg/setup/templates/openmcp-operator.yaml", s.Operator); err != nil {
+		if _, err := resources.CreateObjectsFromTemplateFile(ctx, c, tmpl, s.Operator); err != nil {
 			return ctx, err
 		}
 		// wait for deployment to be ready
@@ -109,11 +121,31 @@ func (s *OpenMCPSetup) installClusterProviders() env.Func {
 	}
 }
 
-// InstallServiceProvider creates a service provider object on the platform cluster and waits until it is ready
 func (s *OpenMCPSetup) installServiceProviders() env.Func {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		for _, sp := range s.ServiceProviders {
 			if err := providers.InstallServiceProvider(ctx, c, sp); err != nil {
+				return ctx, err
+			}
+		}
+		return ctx, nil
+	}
+}
+
+func (s *OpenMCPSetup) loadServiceProviderImages(platformCluster string) env.Func {
+	funcs := []env.Func{}
+	for _, sp := range s.ServiceProviders {
+		funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, sp.Image))
+	}
+	return Compose(funcs...)
+}
+
+// Compose executes multiple env.Funcs in a row
+func Compose(envfuncs ...env.Func) env.Func {
+	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
+		for _, envfunc := range envfuncs {
+			var err error
+			if ctx, err = envfunc(ctx, cfg); err != nil {
 				return ctx, err
 			}
 		}
