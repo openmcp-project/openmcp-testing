@@ -40,7 +40,7 @@ type OpenMCPOperatorSetup struct {
 	WaitOpts     []wait.Option
 }
 
-// Bootstrap sets up a the minimum set of components of an openMCP installation and returns the platform cluster name
+// Bootstrap sets up the minimum set of components of an openMCP installation and returns the platform cluster name
 func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) string {
 	kindConfig := internal.MustTmpFileFromEmbedFS(configFS, "config/kind-config.yaml")
 	operatorTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/operator.yaml.tmpl")
