@@ -43,9 +43,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 	testenv = env.NewWithConfig(envconf.New().WithNamespace(openmcp.Namespace))
-	if err := openmcp.Bootstrap(testenv); err != nil {
-		panic(fmt.Errorf("openmcp bootstrap failed: %v", err))
-	}
+	openmcp.Bootstrap(testenv)
 	os.Exit(testenv.Run(m))
 }
 

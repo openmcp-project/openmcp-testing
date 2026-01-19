@@ -40,8 +40,8 @@ type OpenMCPOperatorSetup struct {
 	WaitOpts     []wait.Option
 }
 
-// Bootstrap sets up a the minimum set of components of an openMCP installation
-func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) error {
+// Bootstrap sets up the minimum set of components of an openMCP installation and returns the platform cluster name
+func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) string {
 	kindConfig := internal.MustTmpFileFromEmbedFS(configFS, "config/kind-config.yaml")
 	operatorTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/operator.yaml.tmpl")
 	platformClusterName := envconf.RandomName("platform", 16)
@@ -50,12 +50,12 @@ func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) error {
 		Setup(envfuncs.CreateNamespace(s.Namespace)).
 		Setup(s.installOpenMCPOperator(operatorTemplate)).
 		Setup(s.installClusterProviders()).
+		Setup(s.verifyEnvironment()).
 		Setup(s.loadServiceProviderImages(platformClusterName)).
 		Setup(s.installServiceProviders()).
-		Setup(s.verifyEnvironment()).
 		Finish(s.cleanup(kindConfig, operatorTemplate)).
 		Finish(envfuncs.DestroyCluster(platformClusterName))
-	return nil
+	return platformClusterName
 }
 
 func createPlatformCluster(name string, kindConfig string) types.EnvFunc {
