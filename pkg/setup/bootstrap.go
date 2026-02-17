@@ -48,10 +48,10 @@ func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) string {
 	s.Operator.Namespace = s.Namespace
 	testenv.Setup(createPlatformCluster(platformClusterName, kindConfig)).
 		Setup(envfuncs.CreateNamespace(s.Namespace)).
+		Setup(s.loadImagesToCluster(platformClusterName)).
 		Setup(s.installOpenMCPOperator(operatorTemplate)).
 		Setup(s.installClusterProviders()).
 		Setup(s.verifyEnvironment()).
-		Setup(s.loadServiceProviderImages(platformClusterName)).
 		Setup(s.installServiceProviders()).
 		Finish(s.cleanup(kindConfig, operatorTemplate)).
 		Finish(envfuncs.DestroyCluster(platformClusterName))
@@ -132,8 +132,12 @@ func (s *OpenMCPSetup) installServiceProviders() env.Func {
 	}
 }
 
-func (s *OpenMCPSetup) loadServiceProviderImages(platformCluster string) env.Func {
+func (s *OpenMCPSetup) loadImagesToCluster(platformCluster string) env.Func {
 	funcs := []env.Func{}
+	funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, s.Operator.Image))
+	for _, cp := range s.ClusterProviders {
+		funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, cp.Image))
+	}
 	for _, sp := range s.ServiceProviders {
 		funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, sp.Image))
 	}

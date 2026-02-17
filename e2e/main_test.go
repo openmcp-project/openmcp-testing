@@ -20,19 +20,21 @@ var testenv env.Environment
 func TestMain(m *testing.M) {
 	initLogging()
 	serviceProviderImage := "ghcr.io/openmcp-project/images/service-provider-crossplane:v0.1.4"
-	mustPullImage(serviceProviderImage)
+	operatorImage := "ghcr.io/openmcp-project/images/openmcp-operator:v0.18.1"
+	clusterProviderImage := "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.1.0"
+	mustPullImages(operatorImage, clusterProviderImage, serviceProviderImage)
 	openmcp := setup.OpenMCPSetup{
 		Namespace: "openmcp-system",
 		Operator: setup.OpenMCPOperatorSetup{
 			Name:         "openmcp-operator",
-			Image:        "ghcr.io/openmcp-project/images/openmcp-operator:v0.17.1",
+			Image:        operatorImage,
 			Environment:  "debug",
 			PlatformName: "platform",
 		},
 		ClusterProviders: []providers.ClusterProviderSetup{
 			{
 				Name:  "kind",
-				Image: "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.0.15",
+				Image: clusterProviderImage,
 			},
 		},
 		ServiceProviders: []providers.ServiceProviderSetup{
@@ -55,12 +57,14 @@ func initLogging() {
 	flag.Parse()
 }
 
-func mustPullImage(image string) {
-	klog.Info("Pulling ", image)
-	runner := gexe.New()
-	p := runner.RunProc(fmt.Sprintf("docker pull %s", image))
-	klog.V(4).Info(p.Out())
-	if p.Err() != nil {
-		panic(fmt.Errorf("docker pull %v failed: %w: %s", image, p.Err(), p.Result()))
+func mustPullImages(images ...string) {
+	for _, img := range images {
+		klog.Info("Pulling ", img)
+		runner := gexe.New()
+		p := runner.RunProc(fmt.Sprintf("docker pull %s", img))
+		klog.V(4).Info(p.Out())
+		if p.Err() != nil {
+			panic(fmt.Errorf("docker pull %v failed: %w: %s", img, p.Err(), p.Result()))
+		}
 	}
 }
