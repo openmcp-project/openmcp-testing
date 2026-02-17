@@ -160,15 +160,17 @@ func Compose(envfuncs ...env.Func) env.Func {
 	}
 }
 
-// MustPullImages pulls each digest of the provided images
+// MustPullImages pulls the provided images, including each manifest digest
 func MustPullImages(images ...string) {
 	for _, img := range images {
-		klog.Info("Inspecting ", img)
+		klog.Info("Pulling ", img)
 		runner := gexe.New()
-		p := runner.RunProc(fmt.Sprintf("docker buildx imagetools inspect --raw %s", img))
-		klog.V(4).Info(p.Out())
-		if p.Err() != nil {
+		if p := runner.RunProc(fmt.Sprintf("docker pull %s", img)); p.Err() != nil {
 			panic(fmt.Errorf("docker pull %v failed: %w: %s", img, p.Err(), p.Result()))
+		}
+		p := runner.RunProc(fmt.Sprintf("docker buildx imagetools inspect --raw %s", img))
+		if p.Err() != nil {
+			panic(fmt.Errorf("docker buildx imagetools inspect --raw %v failed: %w: %s", img, p.Err(), p.Result()))
 		}
 		decoder := json.NewDecoder(p.Out())
 		manifests := &imageManifests{}
