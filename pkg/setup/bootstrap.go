@@ -3,8 +3,6 @@ package setup
 import (
 	"context"
 	"embed"
-	"encoding/json"
-	"fmt"
 	"os"
 
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
@@ -16,8 +14,6 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/envfuncs"
 	"sigs.k8s.io/e2e-framework/pkg/types"
 	"sigs.k8s.io/e2e-framework/support/kind"
-
-	"github.com/vladimirvivien/gexe"
 
 	"github.com/openmcp-project/openmcp-testing/internal"
 	"github.com/openmcp-project/openmcp-testing/pkg/providers"
@@ -42,6 +38,8 @@ type OpenMCPOperatorSetup struct {
 	Environment  string
 	PlatformName string
 	WaitOpts     []wait.Option
+	// LoadImageToCluster allows using local images that have to be loaded into the kind cluster
+	LoadImageToCluster bool
 }
 
 // Bootstrap sets up the minimum set of components of an openMCP installation and returns the platform cluster name
@@ -138,11 +136,18 @@ func (s *OpenMCPSetup) installServiceProviders() env.Func {
 
 func (s *OpenMCPSetup) loadImagesToCluster(platformCluster string) env.Func {
 	funcs := []env.Func{}
+	if s.Operator.LoadImageToCluster {
+		funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, s.Operator.Image))
+	}
 	for _, cp := range s.ClusterProviders {
-		funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, cp.Image))
+		if cp.LoadImageToCluster {
+			funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, cp.Image))
+		}
 	}
 	for _, sp := range s.ServiceProviders {
-		funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, sp.Image))
+		if sp.LoadImageToCluster {
+			funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, sp.Image))
+		}
 	}
 	return Compose(funcs...)
 }
@@ -158,40 +163,4 @@ func Compose(envfuncs ...env.Func) env.Func {
 		}
 		return ctx, nil
 	}
-}
-
-// MustPullImages pulls the provided images, including each manifest digest
-func MustPullImages(images ...string) {
-	for _, img := range images {
-		klog.Info("Pulling ", img)
-		runner := gexe.New()
-		if p := runner.RunProc(fmt.Sprintf("docker pull %s", img)); p.Err() != nil {
-			panic(fmt.Errorf("docker pull %v failed: %w: %s", img, p.Err(), p.Result()))
-		}
-		p := runner.RunProc(fmt.Sprintf("docker buildx imagetools inspect --raw %s", img))
-		if p.Err() != nil {
-			panic(fmt.Errorf("docker buildx imagetools inspect --raw %v failed: %w: %s", img, p.Err(), p.Result()))
-		}
-		decoder := json.NewDecoder(p.Out())
-		manifests := &imageManifests{}
-		if err := decoder.Decode(manifests); err != nil {
-			panic(fmt.Errorf("manifest decoding failed: %v", err))
-		}
-		for _, man := range manifests.Manifests {
-			klog.Infof("Pulling %s@%s", img, man.Digest)
-			p := runner.RunProc(fmt.Sprintf("docker pull %s@%s", img, man.Digest))
-			klog.V(4).Info(p.Out())
-			if p.Err() != nil {
-				panic(fmt.Errorf("docker pull %v failed: %w: %s", img, p.Err(), p.Result()))
-			}
-		}
-	}
-}
-
-type imageManifests struct {
-	Manifests []imageManifestDigest `json:"manifests"`
-}
-
-type imageManifestDigest struct {
-	Digest string `json:"digest"`
 }
