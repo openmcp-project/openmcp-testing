@@ -134,7 +134,6 @@ func (s *OpenMCPSetup) installServiceProviders() env.Func {
 
 func (s *OpenMCPSetup) loadImagesToCluster(platformCluster string) env.Func {
 	funcs := []env.Func{}
-	funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, s.Operator.Image))
 	for _, cp := range s.ClusterProviders {
 		funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, cp.Image))
 	}

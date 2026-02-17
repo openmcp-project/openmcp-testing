@@ -20,14 +20,13 @@ var testenv env.Environment
 func TestMain(m *testing.M) {
 	initLogging()
 	serviceProviderImage := "ghcr.io/openmcp-project/images/service-provider-crossplane:v0.1.4"
-	operatorImage := "ghcr.io/openmcp-project/images/openmcp-operator:v0.18.1"
 	clusterProviderImage := "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.1.0"
-	mustPullImages(operatorImage, clusterProviderImage, serviceProviderImage)
+	mustPullImages(clusterProviderImage, serviceProviderImage)
 	openmcp := setup.OpenMCPSetup{
 		Namespace: "openmcp-system",
 		Operator: setup.OpenMCPOperatorSetup{
 			Name:         "openmcp-operator",
-			Image:        operatorImage,
+			Image:        "ghcr.io/openmcp-project/images/openmcp-operator:v0.18.1",
 			Environment:  "debug",
 			PlatformName: "platform",
 		},
