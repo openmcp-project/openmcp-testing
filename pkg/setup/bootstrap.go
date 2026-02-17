@@ -3,6 +3,8 @@ package setup
 import (
 	"context"
 	"embed"
+	"encoding/json"
+	"fmt"
 	"os"
 
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
@@ -14,6 +16,8 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/envfuncs"
 	"sigs.k8s.io/e2e-framework/pkg/types"
 	"sigs.k8s.io/e2e-framework/support/kind"
+
+	"github.com/vladimirvivien/gexe"
 
 	"github.com/openmcp-project/openmcp-testing/internal"
 	"github.com/openmcp-project/openmcp-testing/pkg/providers"
@@ -154,4 +158,38 @@ func Compose(envfuncs ...env.Func) env.Func {
 		}
 		return ctx, nil
 	}
+}
+
+// MustPullImages pulls each digest of the provided images
+func MustPullImages(images ...string) {
+	for _, img := range images {
+		klog.Info("Inspecting ", img)
+		runner := gexe.New()
+		p := runner.RunProc(fmt.Sprintf("docker buildx imagetools inspect --raw %s", img))
+		klog.V(4).Info(p.Out())
+		if p.Err() != nil {
+			panic(fmt.Errorf("docker pull %v failed: %w: %s", img, p.Err(), p.Result()))
+		}
+		decoder := json.NewDecoder(p.Out())
+		manifests := &imageManifests{}
+		if err := decoder.Decode(manifests); err != nil {
+			panic(fmt.Errorf("manifest decoding failed: %v", err))
+		}
+		for _, man := range manifests.Manifests {
+			klog.Infof("Pulling %s@%s", img, man.Digest)
+			p := runner.RunProc(fmt.Sprintf("docker pull %s@%s", img, man.Digest))
+			klog.V(4).Info(p.Out())
+			if p.Err() != nil {
+				panic(fmt.Errorf("docker pull %v failed: %w: %s", img, p.Err(), p.Result()))
+			}
+		}
+	}
+}
+
+type imageManifests struct {
+	Manifests []imageManifestDigest `json:"manifests"`
+}
+
+type imageManifestDigest struct {
+	Digest string `json:"digest"`
 }

@@ -2,7 +2,6 @@ package e2e
 
 import (
 	"flag"
-	"fmt"
 	"os"
 	"testing"
 
@@ -12,7 +11,6 @@ import (
 
 	"github.com/openmcp-project/openmcp-testing/pkg/providers"
 	"github.com/openmcp-project/openmcp-testing/pkg/setup"
-	"github.com/vladimirvivien/gexe"
 )
 
 var testenv env.Environment
@@ -21,7 +19,7 @@ func TestMain(m *testing.M) {
 	initLogging()
 	serviceProviderImage := "ghcr.io/openmcp-project/images/service-provider-crossplane:v0.1.4"
 	clusterProviderImage := "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.1.0"
-	mustPullImages(clusterProviderImage, serviceProviderImage)
+	setup.MustPullImages(clusterProviderImage, serviceProviderImage)
 	openmcp := setup.OpenMCPSetup{
 		Namespace: "openmcp-system",
 		Operator: setup.OpenMCPOperatorSetup{
@@ -54,16 +52,4 @@ func initLogging() {
 		panic(err)
 	}
 	flag.Parse()
-}
-
-func mustPullImages(images ...string) {
-	for _, img := range images {
-		klog.Info("Pulling ", img)
-		runner := gexe.New()
-		p := runner.RunProc(fmt.Sprintf("docker pull %s", img))
-		klog.V(4).Info(p.Out())
-		if p.Err() != nil {
-			panic(fmt.Errorf("docker pull %v failed: %w: %s", img, p.Err(), p.Result()))
-		}
-	}
 }
