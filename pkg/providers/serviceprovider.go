@@ -31,6 +31,8 @@ type ServiceProviderSetup struct {
 	Name     string
 	Image    string
 	WaitOpts []wait.Option
+	// LoadImageToCluster allows using local images that have to be loaded into the kind cluster
+	LoadImageToCluster bool
 }
 
 func serviceProviderRef(name string) *unstructured.Unstructured {

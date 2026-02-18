@@ -38,6 +38,8 @@ type OpenMCPOperatorSetup struct {
 	Environment  string
 	PlatformName string
 	WaitOpts     []wait.Option
+	// LoadImageToCluster allows using local images that have to be loaded into the kind cluster
+	LoadImageToCluster bool
 }
 
 // Bootstrap sets up the minimum set of components of an openMCP installation and returns the platform cluster name
@@ -48,10 +50,10 @@ func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) string {
 	s.Operator.Namespace = s.Namespace
 	testenv.Setup(createPlatformCluster(platformClusterName, kindConfig)).
 		Setup(envfuncs.CreateNamespace(s.Namespace)).
+		Setup(s.loadImagesToCluster(platformClusterName)).
 		Setup(s.installOpenMCPOperator(operatorTemplate)).
 		Setup(s.installClusterProviders()).
 		Setup(s.verifyEnvironment()).
-		Setup(s.loadServiceProviderImages(platformClusterName)).
 		Setup(s.installServiceProviders()).
 		Finish(s.cleanup(kindConfig, operatorTemplate)).
 		Finish(envfuncs.DestroyCluster(platformClusterName))
@@ -132,10 +134,20 @@ func (s *OpenMCPSetup) installServiceProviders() env.Func {
 	}
 }
 
-func (s *OpenMCPSetup) loadServiceProviderImages(platformCluster string) env.Func {
+func (s *OpenMCPSetup) loadImagesToCluster(platformCluster string) env.Func {
 	funcs := []env.Func{}
+	if s.Operator.LoadImageToCluster {
+		funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, s.Operator.Image))
+	}
+	for _, cp := range s.ClusterProviders {
+		if cp.LoadImageToCluster {
+			funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, cp.Image))
+		}
+	}
 	for _, sp := range s.ServiceProviders {
-		funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, sp.Image))
+		if sp.LoadImageToCluster {
+			funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, sp.Image))
+		}
 	}
 	return Compose(funcs...)
 }
