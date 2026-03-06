@@ -135,7 +135,7 @@ func ImportToOnboardingCluster(ctx context.Context, dir string, options ...wait.
 }
 
 // ImportToMcpCluster applies a set of resources from a directory to the mcp cluster
-func ImportToMcpCluster(ctx context.Context, c *envconf.Config, mcpName, dir string, options ...wait.Option) (*unstructured.UnstructuredList, error) {
+func ImportToMCPCluster(ctx context.Context, c *envconf.Config, mcpName, dir string, options ...wait.Option) (*unstructured.UnstructuredList, error) {
 	mcpConfig, err := MCPConfig(ctx, c, mcpName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to retrieve mcp cluster config: %v", err)
