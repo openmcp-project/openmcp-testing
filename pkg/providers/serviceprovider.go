@@ -73,7 +73,7 @@ func ImportServiceProviderAPIs(directory string, opts ...wait.Option) features.F
 func ImportDomainAPIs(mcpName string, directory string, opts ...wait.Option) features.Func {
 	return func(ctx context.Context, t *testing.T, cfg *envconf.Config) context.Context {
 		klog.Infof("apply service provider resources to MCP cluster from %s ...", directory)
-		if _, err := clusterutils.ImportToMcpCluster(ctx, cfg, mcpName, directory, opts...); err != nil {
+		if _, err := clusterutils.ImportToMCPCluster(ctx, cfg, mcpName, directory, opts...); err != nil {
 			t.Error(err)
 		}
 		return ctx
