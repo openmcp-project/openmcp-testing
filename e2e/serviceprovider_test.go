@@ -18,7 +18,7 @@ func TestServiceProvider(t *testing.T) {
 	basicProviderTest := features.New("provider test").
 		Setup(providers.CreateMCP("test-mcp", wait.WithTimeout(2*time.Minute))).
 		Setup(providers.ImportServiceProviderAPIs("serviceproviderobjects", wait.WithTimeout(time.Minute))).
-		Setup(providers.ImportDomainAPIs("domainobjects", wait.WithTimeout(time.Minute))).
+		Setup(providers.ImportDomainAPIs("test-mcp", "domainobjects", wait.WithTimeout(time.Minute))).
 		Assess("verify onboarding cluster objects", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			cfg, err := clusterutils.OnboardingConfig()
 			if err != nil {
@@ -29,7 +29,7 @@ func TestServiceProvider(t *testing.T) {
 			return ctx
 		}).
 		Assess("verify mcp cluster objects", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			cfg, err := clusterutils.McpConfig()
+			cfg, err := clusterutils.MCPConfig(ctx, c, "test-mcp")
 			if err != nil {
 				t.Error(err)
 				return ctx
