@@ -5,10 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openmcp-project/openmcp-testing/pkg/conditions"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/features"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/openmcp-project/openmcp-testing/pkg/clusterutils"
 	"github.com/openmcp-project/openmcp-testing/pkg/providers"
@@ -35,6 +37,20 @@ func TestServiceProvider(t *testing.T) {
 				return ctx
 			}
 			assertDummyConfigMap(ctx, t, cfg)
+			return ctx
+		}).
+		Assess("verify default gateway", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			if installErr := gatewayv1.Install(c.Client().Resources().GetScheme()); installErr != nil {
+				t.Error(installErr)
+			}
+
+			gateway := &gatewayv1.Gateway{}
+			gateway.SetName("default")
+			gateway.SetNamespace("openmcp-system")
+
+			if err := wait.For(conditions.Match(gateway, c, "Accepted", corev1.ConditionTrue), wait.WithTimeout(time.Minute)); err != nil {
+				t.Error(err)
+			}
 			return ctx
 		}).
 		Teardown(providers.DeleteMCP("test-mcp", wait.WithTimeout(time.Minute)))

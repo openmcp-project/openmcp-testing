@@ -3,8 +3,11 @@ package setup
 import (
 	"context"
 	"embed"
+	"fmt"
 	"os"
 
+	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/wait"
@@ -14,6 +17,9 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/envfuncs"
 	"sigs.k8s.io/e2e-framework/pkg/types"
 	"sigs.k8s.io/e2e-framework/support/kind"
+
+	"github.com/openmcp-project/openmcp-testing/pkg/platformservices"
+	"github.com/openmcp-project/openmcp-testing/pkg/setup/extensions"
 
 	"github.com/openmcp-project/openmcp-testing/internal"
 	"github.com/openmcp-project/openmcp-testing/pkg/providers"
@@ -28,6 +34,8 @@ type OpenMCPSetup struct {
 	Operator         OpenMCPOperatorSetup
 	ClusterProviders []providers.ClusterProviderSetup
 	ServiceProviders []providers.ServiceProviderSetup
+	PlatformServices []platformservices.PlatformServiceSetup
+	Extensions       []extensions.Extension
 	WaitOpts         []wait.Option
 }
 
@@ -53,7 +61,10 @@ func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) string {
 		Setup(s.loadImagesToCluster(platformClusterName)).
 		Setup(s.installOpenMCPOperator(operatorTemplate)).
 		Setup(s.installClusterProviders()).
+		Setup(s.managePlatformCluster(platformClusterName)).
+		Setup(s.installExtensions()).
 		Setup(s.verifyEnvironment()).
+		Setup(s.installPlatformServices()).
 		Setup(s.installServiceProviders()).
 		Finish(s.cleanup(kindConfig, operatorTemplate)).
 		Finish(envfuncs.DestroyCluster(platformClusterName))
@@ -74,6 +85,11 @@ func (s *OpenMCPSetup) cleanup(tmpFiles ...string) types.EnvFunc {
 		for _, sp := range s.ServiceProviders {
 			if err := providers.DeleteServiceProvider(ctx, c, sp.Name, sp.WaitOpts...); err != nil {
 				klog.Errorf("delete service provider failed: %v", err)
+			}
+		}
+		for _, ps := range s.PlatformServices {
+			if err := platformservices.DeletePlatformService(ctx, c, ps.Name); err != nil {
+				klog.Errorf("delete platform service failed: %v", err)
 			}
 		}
 		if err := providers.DeleteCluster(ctx, c, apimachinerytypes.NamespacedName{Namespace: s.Namespace, Name: "onboarding"},
@@ -116,6 +132,83 @@ func (s *OpenMCPSetup) installClusterProviders() env.Func {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		for _, cp := range s.ClusterProviders {
 			if err := providers.InstallClusterProvider(ctx, c, cp); err != nil {
+				return ctx, err
+			}
+		}
+		return ctx, nil
+	}
+}
+
+func (s *OpenMCPSetup) managePlatformCluster(platformClusterName string) env.Func {
+	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
+		if len(s.ClusterProviders) == 0 {
+			return ctx, fmt.Errorf("no cluster providers found")
+		}
+
+		// Use the first cluster provider for the platform cluster
+		// TODO: Consider adding explicit PlatformClusterProvider field to OpenMCPSetup
+		platformClusterClusterProvider := s.ClusterProviders[0]
+
+		// Currently only kind provider is supported for platform cluster management
+		if platformClusterClusterProvider.Name != "kind" {
+			klog.Warningf("platform cluster provider type '%s' is not 'kind', skipping platform cluster resource creation", platformClusterClusterProvider.Name)
+			return ctx, nil
+		}
+
+		klog.Info("create platform cluster resource...")
+
+		platformCluster := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "clusters.openmcp.cloud/v1alpha1",
+				"kind":       "Cluster",
+				"metadata": map[string]interface{}{
+					"name":      "platform",
+					"namespace": s.Namespace,
+					"annotations": map[string]string{
+						"kind.clusters.openmcp.cloud/name": platformClusterName,
+					},
+				},
+				"spec": map[string]interface{}{
+					"kubernetes": map[string]interface{}{},
+					"profile":    "kind",
+					"purposes": []interface{}{
+						clustersv1alpha1.PURPOSE_PLATFORM,
+					},
+					"tenancy": string(clustersv1alpha1.TENANCY_SHARED),
+				},
+			},
+		}
+
+		// Create the platform cluster object in Kubernetes
+		if createErr := c.Client().Resources().Create(ctx, platformCluster); createErr != nil {
+			return ctx, createErr
+		}
+
+		klog.Info("platform cluster resource created")
+		return ctx, nil
+	}
+}
+
+func (s *OpenMCPSetup) installExtensions() env.Func {
+	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
+		klog.Info("install extensions...")
+		for _, ext := range s.Extensions {
+			klog.Infof("install extension %s", ext.Name())
+			if installErr := ext.Install(ctx, c); installErr != nil {
+				return ctx, fmt.Errorf("install extension %s failed: %v", ext.Name(), installErr)
+			}
+			if schemeErr := ext.RegisterSchemes(ctx, c.Client().Resources().GetScheme()); schemeErr != nil {
+				return ctx, fmt.Errorf("install extension scheme %s failed: %v", ext.Name(), schemeErr)
+			}
+		}
+		return ctx, nil
+	}
+}
+
+func (s *OpenMCPSetup) installPlatformServices() env.Func {
+	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
+		for _, ps := range s.PlatformServices {
+			if err := platformservices.InstallPlatformService(ctx, c, ps); err != nil {
 				return ctx, err
 			}
 		}

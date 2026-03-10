@@ -125,6 +125,11 @@ func retrieveKindClusterNameByPrefix(prefix string, provider ClusterProvider) (s
 	return "", fmt.Errorf("no cluster found with prefix %s", prefix)
 }
 
+// ImportToPlatformCluster applies a set of resources from a directory to the platform cluster
+func ImportToPlatformCluster(ctx context.Context, c *envconf.Config, dir string, options ...wait.Option) (*unstructured.UnstructuredList, error) {
+	return importFromDir(ctx, c, dir, options...)
+}
+
 // ImportToOnboardingCluster applies a set of resources from a directory to the onboarding cluster
 func ImportToOnboardingCluster(ctx context.Context, dir string, options ...wait.Option) (*unstructured.UnstructuredList, error) {
 	c, err := OnboardingConfig()
