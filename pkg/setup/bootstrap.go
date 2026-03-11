@@ -242,6 +242,11 @@ func (s *OpenMCPSetup) loadImagesToCluster(platformCluster string) env.Func {
 			funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, sp.Image))
 		}
 	}
+	for _, cp := range s.PlatformServices {
+		if cp.LoadImageToCluster {
+			funcs = append(funcs, envfuncs.LoadDockerImageToCluster(platformCluster, cp.Image))
+		}
+	}
 	return Compose(funcs...)
 }
 
