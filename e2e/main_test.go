@@ -5,12 +5,14 @@ import (
 	"os"
 	"testing"
 
+	"github.com/openmcp-project/openmcp-testing/pkg/platformservices"
+	"github.com/openmcp-project/openmcp-testing/pkg/providers"
+	"github.com/openmcp-project/openmcp-testing/pkg/setup"
+	"github.com/openmcp-project/openmcp-testing/pkg/setup/extensions"
+	"github.com/openmcp-project/openmcp-testing/pkg/setup/extensions/fluxcd"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
-
-	"github.com/openmcp-project/openmcp-testing/pkg/providers"
-	"github.com/openmcp-project/openmcp-testing/pkg/setup"
 )
 
 var testenv env.Environment
@@ -36,6 +38,16 @@ func TestMain(m *testing.M) {
 				Name:  "crossplane",
 				Image: "ghcr.io/openmcp-project/images/service-provider-crossplane:v0.1.4",
 			},
+		},
+		PlatformServices: []platformservices.PlatformServiceSetup{
+			{
+				Name:                      "gateway",
+				Image:                     "ghcr.io/openmcp-project/images/platform-service-gateway:v0.0.9",
+				PlatformServiceConfigsDir: "platformservice-gateway",
+			},
+		},
+		Extensions: []extensions.Extension{
+			&fluxcd.FluxCD{},
 		},
 	}
 	testenv = env.NewWithConfig(envconf.New().WithNamespace(openmcp.Namespace))
