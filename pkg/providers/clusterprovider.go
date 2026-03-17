@@ -72,20 +72,22 @@ func clusterRefList() *unstructured.UnstructuredList {
 	return list
 }
 
-func clusterRef(ref types.NamespacedName) *unstructured.Unstructured {
-	return internal.UnstructuredRef(ref.Name, ref.Namespace, schema.GroupVersionKind{
-		Group:   "clusters.openmcp.cloud",
-		Version: "v1alpha1",
-		Kind:    "cluster",
-	})
-}
-
 func clusterProviderRef(name string) *unstructured.Unstructured {
 	return internal.UnstructuredRef(name, "", schema.GroupVersionKind{
 		Group:   "openmcp.cloud",
 		Version: "v1alpha1",
 		Kind:    "clusterprovider",
 	})
+}
+
+func clusterRequestRefList() *unstructured.UnstructuredList {
+	list := &unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "clusters.openmcp.cloud",
+		Version: "v1alpha1",
+		Kind:    "clusterrequest",
+	})
+	return list
 }
 
 // InstallClusterProvider creates a cluster provider object on the platform cluster and waits until it is ready
@@ -159,8 +161,24 @@ func ClustersReady(ctx context.Context, c *envconf.Config, options ...wait.Optio
 	return nil
 }
 
-// DeleteCluster deletes the referenced cluster object
+// DeleteCluster deletes the referenced cluster object by deleting every cluster request that belongs to this cluster
 func DeleteCluster(ctx context.Context, c *envconf.Config, ref types.NamespacedName, options ...wait.Option) error {
 	klog.Infof("delete cluster: %s", ref)
-	return resources.DeleteObject(ctx, c, clusterRef(ref), options...)
+	// loop delete for cluster requests with status.clusters.name = ref.name
+	clusterRequestList := clusterRequestRefList()
+	if err := c.Client().Resources().WithNamespace(ref.Namespace).List(ctx, clusterRequestList); err != nil {
+		return err
+	}
+	for _, clusterRequest := range clusterRequestList.Items {
+		cluster, _, err := unstructured.NestedString(clusterRequest.Object, "status", "cluster", "name")
+		if err != nil {
+			return err
+		}
+		if cluster == ref.Name {
+			if err := resources.DeleteObject(ctx, c, &clusterRequest, options...); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
