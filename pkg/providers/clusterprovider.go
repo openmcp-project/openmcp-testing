@@ -10,12 +10,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/wait"
+	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/features"
 
 	"github.com/openmcp-project/openmcp-testing/internal"
 	"github.com/openmcp-project/openmcp-testing/pkg/clusterutils"
-	"github.com/openmcp-project/openmcp-testing/pkg/conditions"
+	openmcpconditions "github.com/openmcp-project/openmcp-testing/pkg/conditions"
 	"github.com/openmcp-project/openmcp-testing/pkg/resources"
 )
 
@@ -62,6 +63,14 @@ func mcpRef(ref types.NamespacedName) *unstructured.Unstructured {
 	})
 }
 
+func clusterRef(ref types.NamespacedName) *unstructured.Unstructured {
+	return internal.UnstructuredRef(ref.Name, ref.Namespace, schema.GroupVersionKind{
+		Group:   "clusters.openmcp.cloud",
+		Version: "v1alpha1",
+		Kind:    "cluster",
+	})
+}
+
 func clusterRefList() *unstructured.UnstructuredList {
 	list := &unstructured.UnstructuredList{}
 	list.SetGroupVersionKind(schema.GroupVersionKind{
@@ -97,7 +106,7 @@ func InstallClusterProvider(ctx context.Context, c *envconf.Config, clusterProvi
 	if err != nil {
 		return err
 	}
-	return wait.For(conditions.Match(obj, c, "Ready", corev1.ConditionTrue), clusterProvider.WaitOpts...)
+	return wait.For(openmcpconditions.Match(obj, c, "Ready", corev1.ConditionTrue), clusterProvider.WaitOpts...)
 }
 
 // DeleteClusterProvider deletes the cluster provider object and waits until the object has been deleted
@@ -120,7 +129,7 @@ func CreateMCP(name string, opts ...wait.Option) features.Func {
 			t.Errorf("failed to create MCP: %v", err)
 			return ctx
 		}
-		if err := wait.For(conditions.Status(obj, onboardingCfg, "phase", "Ready"), opts...); err != nil {
+		if err := wait.For(openmcpconditions.Status(obj, onboardingCfg, "phase", "Ready"), opts...); err != nil {
 			t.Errorf("MCP failed to get ready: %v", err)
 		}
 		if err := ClustersReady(ctx, c, opts...); err != nil {
@@ -154,7 +163,7 @@ func DeleteMCP(name string, opts ...wait.Option) features.Func {
 
 // ClustersReady returns true if all cluster objects are ready
 func ClustersReady(ctx context.Context, c *envconf.Config, options ...wait.Option) error {
-	if err := wait.For(conditions.MatchList(clusterRefList(), c, "Ready", corev1.ConditionTrue), options...); err != nil {
+	if err := wait.For(openmcpconditions.MatchList(clusterRefList(), c, "Ready", corev1.ConditionTrue), options...); err != nil {
 		return err
 	}
 	klog.Infof("all clusters ready")
@@ -179,6 +188,10 @@ func DeleteCluster(ctx context.Context, c *envconf.Config, ref types.NamespacedN
 				return err
 			}
 		}
+	}
+	if err := wait.For(conditions.New(c.Client().Resources().WithNamespace(ref.Namespace)).
+		ResourceDeleted(clusterRef(ref)), options...); err != nil {
+		return err
 	}
 	return nil
 }
