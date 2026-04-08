@@ -3,9 +3,9 @@ module github.com/openmcp-project/openmcp-testing
 go 1.26.1
 
 require (
-	github.com/fluxcd/flux2/v2 v2.8.3
+	github.com/fluxcd/flux2/v2 v2.8.5
 	github.com/fluxcd/helm-controller/api v1.5.3
-	github.com/fluxcd/kustomize-controller/api v1.8.2
+	github.com/fluxcd/kustomize-controller/api v1.8.3
 	github.com/fluxcd/source-controller/api v1.8.2
 	github.com/stretchr/testify v1.11.1
 	k8s.io/api v0.35.3
@@ -23,7 +23,7 @@ require (
 	github.com/fluxcd/pkg/apis/acl v0.9.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.15.1 // indirect
 	github.com/fluxcd/pkg/apis/meta v1.25.1 // indirect
-	github.com/fluxcd/pkg/kustomize v1.27.1 // indirect
+	github.com/fluxcd/pkg/kustomize v1.27.2 // indirect
 	github.com/fluxcd/pkg/tar v0.17.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
