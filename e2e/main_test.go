@@ -23,26 +23,26 @@ func TestMain(m *testing.M) {
 		Namespace: "openmcp-system",
 		Operator: setup.OpenMCPOperatorSetup{
 			Name:         "openmcp-operator",
-			Image:        "ghcr.io/openmcp-project/images/openmcp-operator:v0.18.1",
+			Image:        "ghcr.io/openmcp-project/images/openmcp-operator:v0.19.0",
 			Environment:  "debug",
 			PlatformName: "platform",
 		},
 		ClusterProviders: []providers.ClusterProviderSetup{
 			{
 				Name:  "kind",
-				Image: "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.1.0",
+				Image: "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.2.0",
 			},
 		},
 		ServiceProviders: []providers.ServiceProviderSetup{
 			{
 				Name:  "crossplane",
-				Image: "ghcr.io/openmcp-project/images/service-provider-crossplane:v0.1.4",
+				Image: "ghcr.io/openmcp-project/images/service-provider-crossplane:v0.4.1",
 			},
 		},
 		PlatformServices: []platformservices.PlatformServiceSetup{
 			{
 				Name:                      "gateway",
-				Image:                     "ghcr.io/openmcp-project/images/platform-service-gateway:v0.0.9",
+				Image:                     "ghcr.io/openmcp-project/images/platform-service-gateway:v0.0.10",
 				PlatformServiceConfigsDir: "platformservice-gateway",
 			},
 		},
