@@ -7,6 +7,7 @@ import (
 	"os"
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -29,14 +30,23 @@ import (
 //go:embed config/*
 var configFS embed.FS
 
+// DefaultPlatformClusterName is the kind cluster name used when
+// OpenMCPSetup.PlatformClusterName is empty. Override the field in your
+// TestMain if you need a per-project name (e.g. to avoid collisions across
+// consumer repos sharing one machine).
+const DefaultPlatformClusterName = "e2e-platform"
+
 type OpenMCPSetup struct {
-	Namespace        string
-	Operator         OpenMCPOperatorSetup
-	ClusterProviders []providers.ClusterProviderSetup
-	ServiceProviders []providers.ServiceProviderSetup
-	PlatformServices []platformservices.PlatformServiceSetup
-	Extensions       []extensions.Extension
-	WaitOpts         []wait.Option
+	Namespace string
+	// PlatformClusterName overrides the kind cluster name used for the
+	// platform cluster. Empty means DefaultPlatformClusterName.
+	PlatformClusterName string
+	Operator            OpenMCPOperatorSetup
+	ClusterProviders    []providers.ClusterProviderSetup
+	ServiceProviders    []providers.ServiceProviderSetup
+	PlatformServices    []platformservices.PlatformServiceSetup
+	Extensions          []extensions.Extension
+	WaitOpts            []wait.Option
 }
 
 type OpenMCPOperatorSetup struct {
@@ -50,14 +60,27 @@ type OpenMCPOperatorSetup struct {
 	LoadImageToCluster bool
 }
 
-// Bootstrap sets up the minimum set of components of an openMCP installation and returns the platform cluster name
+// Bootstrap sets up the minimum set of components of an openMCP installation and returns the platform cluster name.
+//
+// The platform kind cluster name comes from OpenMCPSetup.PlatformClusterName
+// (default DefaultPlatformClusterName). When E2E_REUSE_CLUSTER is truthy, the
+// kind cluster is reused across runs (kind's own Create handles the existence
+// case) and the framework Finish/cleanup hooks are not registered so the
+// cluster survives.
 func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) string {
 	kindConfig := internal.MustTmpFileFromEmbedFS(configFS, "config/kind-config.yaml")
 	operatorTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/operator.yaml.tmpl")
-	platformClusterName := envconf.RandomName("platform", 16)
+	platformClusterName := s.PlatformClusterName
+	if platformClusterName == "" {
+		platformClusterName = DefaultPlatformClusterName
+	}
+	reuseMode := IsReuseMode()
+	if reuseMode {
+		klog.Infof("reuse mode on: kind cluster %q (%s=true)", platformClusterName, EnvReuseCluster)
+	}
 	s.Operator.Namespace = s.Namespace
 	testenv.Setup(createPlatformCluster(platformClusterName, kindConfig)).
-		Setup(envfuncs.CreateNamespace(s.Namespace)).
+		Setup(createNamespaceIdempotent(s.Namespace)).
 		Setup(s.loadImagesToCluster(platformClusterName)).
 		Setup(s.installOpenMCPOperator(operatorTemplate)).
 		Setup(s.installClusterProviders()).
@@ -65,15 +88,33 @@ func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) string {
 		Setup(s.installExtensions()).
 		Setup(s.verifyEnvironment()).
 		Setup(s.installPlatformServices()).
-		Setup(s.installServiceProviders()).
-		Finish(s.cleanup(kindConfig, operatorTemplate)).
-		Finish(envfuncs.DestroyCluster(platformClusterName))
+		Setup(s.installServiceProviders())
+	if !reuseMode {
+		testenv.
+			Finish(s.cleanup(kindConfig, operatorTemplate)).
+			Finish(envfuncs.DestroyCluster(platformClusterName))
+	}
 	return platformClusterName
 }
 
 func createPlatformCluster(name string, kindConfig string) types.EnvFunc {
 	klog.Info("create platform cluster...")
 	return envfuncs.CreateClusterWithConfig(kind.NewProvider(), name, kindConfig)
+}
+
+// createNamespaceIdempotent wraps envfuncs.CreateNamespace so a re-run against
+// an existing cluster does not error on AlreadyExists. It mirrors what
+// envfuncs.CreateNamespace puts on the env config (default namespace) so
+// downstream Setup steps see the same state regardless.
+func createNamespaceIdempotent(name string) types.EnvFunc {
+	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
+		ctx, err := envfuncs.CreateNamespace(name)(ctx, c)
+		if err != nil && apierrors.IsAlreadyExists(err) {
+			c.WithNamespace(name)
+			return ctx, nil
+		}
+		return ctx, err
+	}
 }
 
 func (s *OpenMCPSetup) cleanup(tmpFiles ...string) types.EnvFunc {
