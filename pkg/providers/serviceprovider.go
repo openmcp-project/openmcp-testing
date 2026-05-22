@@ -31,7 +31,12 @@ type ServiceProviderSetup struct {
 	Name     string
 	Image    string
 	WaitOpts []wait.Option
-	// LoadImageToCluster allows using local images that have to be loaded into the kind cluster
+	// LoadImageToCluster, when true, loads the local image into the kind
+	// nodes on every Bootstrap. In reuse mode (E2E_REUSE_CLUSTER=true) it
+	// additionally deletes and re-creates this ServiceProvider CR so the
+	// operator runs its full reconciliation again (init job + run deployment
+	// + Ready), picking up the freshly-loaded image. This flag is the
+	// entry point for the same-tag local-rebuild dev loop.
 	LoadImageToCluster bool
 }
 

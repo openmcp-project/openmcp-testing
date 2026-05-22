@@ -56,7 +56,14 @@ type OpenMCPOperatorSetup struct {
 	Environment  string
 	PlatformName string
 	WaitOpts     []wait.Option
-	// LoadImageToCluster allows using local images that have to be loaded into the kind cluster
+	// LoadImageToCluster, when true, loads the local image into the kind
+	// nodes on every Bootstrap. In reuse mode (E2E_REUSE_CLUSTER=true) it
+	// additionally deletes the operator's Deployment and re-applies the
+	// operator manifest after the install chain so a freshly-loaded same-tag
+	// image actually replaces the running pod. This flag is the
+	// entry point for the same-tag local-rebuild dev loop. No-op outside
+	// reuse mode beyond the kind load itself (fresh bootstraps deploy with
+	// the loaded image immediately).
 	LoadImageToCluster bool
 }
 
@@ -88,7 +95,8 @@ func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) string {
 		Setup(s.installExtensions()).
 		Setup(s.verifyEnvironment()).
 		Setup(s.installPlatformServices()).
-		Setup(s.installServiceProviders())
+		Setup(s.installServiceProviders()).
+		Setup(s.rolloutOnReuseDeployments(operatorTemplate))
 	if !reuseMode {
 		testenv.
 			Finish(s.cleanup(kindConfig, operatorTemplate)).
@@ -298,6 +306,50 @@ func Compose(envfuncs ...env.Func) env.Func {
 			var err error
 			if ctx, err = envfunc(ctx, cfg); err != nil {
 				return ctx, err
+			}
+		}
+		return ctx, nil
+	}
+}
+
+// rolloutOnReuseDeployments returns an env.Func that, when E2E_REUSE_CLUSTER
+// is set, deletes-and-recreates every component whose owning Setup struct has
+// LoadImageToCluster: true. SP/CP/PS each go through the operator's full
+// reconciliation (init job + run deployment + Ready). The Operator itself
+// gets its Deployment deleted and the operator manifest re-applied. No-op
+// outside reuse mode.
+func (s *OpenMCPSetup) rolloutOnReuseDeployments(operatorTemplate string) env.Func {
+	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
+		if !IsReuseMode() {
+			return ctx, nil
+		}
+		if s.Operator.LoadImageToCluster {
+			if err := recreateOperator(ctx, c, s.Operator, operatorTemplate); err != nil {
+				return ctx, fmt.Errorf("rollout operator %q: %w", s.Operator.Name, err)
+			}
+		}
+		for _, sp := range s.ServiceProviders {
+			if !sp.LoadImageToCluster {
+				continue
+			}
+			if err := recreateServiceProvider(ctx, c, sp.Name, sp.Image, sp.WaitOpts...); err != nil {
+				return ctx, fmt.Errorf("rollout service provider %q: %w", sp.Name, err)
+			}
+		}
+		for _, cp := range s.ClusterProviders {
+			if !cp.LoadImageToCluster {
+				continue
+			}
+			if err := recreateClusterProvider(ctx, c, cp.Name, cp.Image, cp.WaitOpts...); err != nil {
+				return ctx, fmt.Errorf("rollout cluster provider %q: %w", cp.Name, err)
+			}
+		}
+		for _, ps := range s.PlatformServices {
+			if !ps.LoadImageToCluster {
+				continue
+			}
+			if err := recreatePlatformService(ctx, c, ps.Name, ps.Image, ps.WaitOpts...); err != nil {
+				return ctx, fmt.Errorf("rollout platform service %q: %w", ps.Name, err)
 			}
 		}
 		return ctx, nil
