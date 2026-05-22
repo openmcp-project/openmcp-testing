@@ -37,6 +37,15 @@ func TestMain(m *testing.M) {
 			{
 				Name:  "crossplane",
 				Image: "ghcr.io/openmcp-project/images/service-provider-crossplane:v0.4.1",
+				// To iterate on a locally-built same-tag image of this SP,
+				// set LoadImageToCluster: true. In reuse mode
+				// (E2E_REUSE_CLUSTER=true) that flag also makes Bootstrap
+				// delete and re-create this ServiceProvider so the operator
+				// runs its full reconciliation again against the freshly-
+				// loaded image. Disabled here because this SP's image isn't
+				// built locally.
+				//
+				// LoadImageToCluster: true,
 			},
 		},
 		PlatformServices: []platformservices.PlatformServiceSetup{
