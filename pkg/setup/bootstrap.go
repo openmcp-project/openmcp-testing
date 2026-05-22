@@ -158,20 +158,20 @@ func (s *OpenMCPSetup) managePlatformCluster(platformClusterName string) env.Fun
 		klog.Info("create platform cluster resource...")
 
 		platformCluster := &unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": "clusters.openmcp.cloud/v1alpha1",
 				"kind":       "Cluster",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name":      "platform",
 					"namespace": s.Namespace,
-					"annotations": map[string]string{
+					"annotations": map[string]any{
 						"kind.clusters.openmcp.cloud/name": platformClusterName,
 					},
 				},
-				"spec": map[string]interface{}{
-					"kubernetes": map[string]interface{}{},
+				"spec": map[string]any{
+					"kubernetes": map[string]any{},
 					"profile":    "kind",
-					"purposes": []interface{}{
+					"purposes": []any{
 						clustersv1alpha1.PURPOSE_PLATFORM,
 					},
 					"tenancy": string(clustersv1alpha1.TENANCY_SHARED),
@@ -180,7 +180,7 @@ func (s *OpenMCPSetup) managePlatformCluster(platformClusterName string) env.Fun
 		}
 
 		// Create the platform cluster object in Kubernetes
-		if createErr := c.Client().Resources().Create(ctx, platformCluster); createErr != nil {
+		if createErr := resources.CreateOrUpdate(ctx, c, platformCluster); createErr != nil {
 			return ctx, createErr
 		}
 

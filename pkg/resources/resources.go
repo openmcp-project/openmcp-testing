@@ -2,11 +2,14 @@ package resources
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/e2e-framework/klient/decoder"
 	"sigs.k8s.io/e2e-framework/klient/k8s"
 	"sigs.k8s.io/e2e-framework/klient/wait"
@@ -51,11 +54,75 @@ func CreateObjectFromTemplate(ctx context.Context, cfg *envconf.Config, template
 	if err != nil {
 		return nil, err
 	}
-	err = cfg.Client().Resources().Create(ctx, obj)
-	if err != nil {
+	if err := CreateOrUpdate(ctx, cfg, obj); err != nil {
 		return nil, err
 	}
 	return obj, nil
+}
+
+// CreateOrUpdate creates obj if it does not exist on the server; otherwise it
+// copies obj's spec, labels, and annotations onto the live object and updates
+// it. status is never touched. Idempotent re-applies that produce no semantic
+// change skip the Update entirely (controllerutil.CreateOrUpdate's deep-equal
+// optimization).
+//
+// The intent is to make install paths idempotent so that the test harness can
+// be re-run against an existing cluster (see E2E_REUSE_CLUSTER) and propagate
+// spec changes (e.g. a new image) without erroring on AlreadyExists.
+func CreateOrUpdate(ctx context.Context, cfg *envconf.Config, obj client.Object) error {
+	crClient, err := client.New(cfg.Client().RESTConfig(), client.Options{
+		Scheme: cfg.Client().Resources().GetScheme(),
+	})
+	if err != nil {
+		return fmt.Errorf("CreateOrUpdate: build client: %w", err)
+	}
+	desired := obj.DeepCopyObject().(client.Object)
+	_, err = controllerutil.CreateOrUpdate(ctx, crClient, obj, func() error {
+		return mergeDesiredIntoLive(desired, obj)
+	})
+	return err
+}
+
+func mergeDesiredIntoLive(desired, live client.Object) error {
+	du, ok := desired.(*unstructured.Unstructured)
+	if !ok {
+		return fmt.Errorf("CreateOrUpdate: desired must be *unstructured.Unstructured, got %T", desired)
+	}
+	lu, ok := live.(*unstructured.Unstructured)
+	if !ok {
+		return fmt.Errorf("CreateOrUpdate: live must be *unstructured.Unstructured, got %T", live)
+	}
+	// controllerutil.CreateOrUpdate asserts that name and namespace are
+	// unchanged between pre-Get and post-mutate. For cluster-scoped resources
+	// (e.g. ClusterRoleBinding) the API server returns metadata.namespace=""
+	// even when our caller stamped one via decoder.MutateNamespace, which
+	// would otherwise trip the assertion. Restore both fields from desired
+	// so the key invariant holds; cluster-scoped Updates ignore namespace.
+	lu.SetName(du.GetName())
+	lu.SetNamespace(du.GetNamespace())
+	spec, found, err := unstructured.NestedFieldCopy(du.Object, "spec")
+	if err != nil {
+		return err
+	}
+	if found {
+		lu.Object["spec"] = spec
+	}
+	lu.SetLabels(mergeStringMap(lu.GetLabels(), du.GetLabels()))
+	lu.SetAnnotations(mergeStringMap(lu.GetAnnotations(), du.GetAnnotations()))
+	return nil
+}
+
+func mergeStringMap(into, from map[string]string) map[string]string {
+	if len(from) == 0 {
+		return into
+	}
+	if into == nil {
+		into = make(map[string]string, len(from))
+	}
+	for k, v := range from {
+		into[k] = v
+	}
+	return into
 }
 
 func createObjectsFromManifest(ctx context.Context, cfg *envconf.Config, manifest string) (*unstructured.UnstructuredList, error) {
@@ -84,6 +151,6 @@ func createAndPopulateList(ctx context.Context, obj k8s.Object, list *unstructur
 		return err
 	}
 	list.Items = append(list.Items, *u)
-	klog.Infof("creating object (%s) %s/%s", obj.GetObjectKind().GroupVersionKind(), obj.GetNamespace(), obj.GetName())
-	return decoder.CreateIgnoreAlreadyExists(cfg.Client().Resources())(ctx, obj)
+	klog.Infof("applying object (%s) %s/%s", obj.GetObjectKind().GroupVersionKind(), obj.GetNamespace(), obj.GetName())
+	return CreateOrUpdate(ctx, cfg, u)
 }
