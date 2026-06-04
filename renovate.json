@@ -26,6 +26,14 @@
         "golang"
       ],
       "rangeStrategy": "bump"
+    },
+    {
+      "description": "Group openmcp-project/build submodule and workflow updates",
+      "matchDepNames": [
+        "hack/common",
+        "openmcp-project/build"
+      ],
+      "groupName": "openmcp-project/build"
     }
   ]
 }
