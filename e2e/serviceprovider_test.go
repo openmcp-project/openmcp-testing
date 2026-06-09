@@ -14,6 +14,7 @@ import (
 
 	"github.com/openmcp-project/openmcp-testing/pkg/clusterutils"
 	"github.com/openmcp-project/openmcp-testing/pkg/providers"
+	"github.com/openmcp-project/openmcp-testing/pkg/setup"
 )
 
 func TestServiceProvider(t *testing.T) {
@@ -53,7 +54,30 @@ func TestServiceProvider(t *testing.T) {
 			}
 			return ctx
 		}).
-		Teardown(providers.DeleteMCP("test-mcp", wait.WithTimeout(time.Minute)))
+		// Delete the dummy ConfigMaps so the next reuse run starts without them.
+		// On a re-run, the import Setups go through CreateOrUpdate, see NotFound,
+		// and re-create them — the earlier "verify ... objects" assesses then
+		// pass again. This is the built-in regression check for the
+		// reuse-cluster idempotency contract.
+		Assess("dummy configmaps can be deleted (re-created on next reuse run)", func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+			onboardingCfg, err := clusterutils.OnboardingConfig()
+			if err != nil {
+				t.Error(err)
+				return ctx
+			}
+			deleteDummyConfigMap(ctx, t, onboardingCfg)
+			mcpCfg, err := clusterutils.MCPConfig(ctx, c, "test-mcp")
+			if err != nil {
+				t.Error(err)
+				return ctx
+			}
+			deleteDummyConfigMap(ctx, t, mcpCfg)
+			return ctx
+		})
+	if !setup.IsReuseMode() {
+		basicProviderTest = basicProviderTest.
+			Teardown(providers.DeleteMCP("test-mcp", wait.WithTimeout(time.Minute)))
+	}
 	testenv.Test(t, basicProviderTest.Feature())
 }
 
@@ -66,5 +90,14 @@ func assertDummyConfigMap(ctx context.Context, t *testing.T, cfg *envconf.Config
 	v, ok := cm.Data["foo"]
 	if !ok || v != "bar" {
 		t.Errorf("expected foo:bar; got: %t %v", ok, v)
+	}
+}
+
+func deleteDummyConfigMap(ctx context.Context, t *testing.T, cfg *envconf.Config) {
+	cm := &corev1.ConfigMap{}
+	cm.SetName("dummy")
+	cm.SetNamespace(corev1.NamespaceDefault)
+	if err := cfg.Client().Resources().Delete(ctx, cm); err != nil {
+		t.Errorf("delete dummy configmap: %v", err)
 	}
 }

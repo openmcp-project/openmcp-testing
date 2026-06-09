@@ -7,6 +7,7 @@ import (
 	"os"
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -29,14 +30,23 @@ import (
 //go:embed config/*
 var configFS embed.FS
 
+// DefaultPlatformClusterName is the kind cluster name used when
+// OpenMCPSetup.PlatformClusterName is empty. Override the field in your
+// TestMain if you need a per-project name (e.g. to avoid collisions across
+// consumer repos sharing one machine).
+const DefaultPlatformClusterName = "e2e-platform"
+
 type OpenMCPSetup struct {
-	Namespace        string
-	Operator         OpenMCPOperatorSetup
-	ClusterProviders []providers.ClusterProviderSetup
-	ServiceProviders []providers.ServiceProviderSetup
-	PlatformServices []platformservices.PlatformServiceSetup
-	Extensions       []extensions.Extension
-	WaitOpts         []wait.Option
+	Namespace string
+	// PlatformClusterName overrides the kind cluster name used for the
+	// platform cluster. Empty means DefaultPlatformClusterName.
+	PlatformClusterName string
+	Operator            OpenMCPOperatorSetup
+	ClusterProviders    []providers.ClusterProviderSetup
+	ServiceProviders    []providers.ServiceProviderSetup
+	PlatformServices    []platformservices.PlatformServiceSetup
+	Extensions          []extensions.Extension
+	WaitOpts            []wait.Option
 }
 
 type OpenMCPOperatorSetup struct {
@@ -46,18 +56,38 @@ type OpenMCPOperatorSetup struct {
 	Environment  string
 	PlatformName string
 	WaitOpts     []wait.Option
-	// LoadImageToCluster allows using local images that have to be loaded into the kind cluster
+	// LoadImageToCluster, when true, loads the local image into the kind
+	// nodes on every Bootstrap. In reuse mode (E2E_REUSE_CLUSTER=true) it
+	// additionally deletes the operator's Deployment and re-applies the
+	// operator manifest after the install chain so a freshly-loaded same-tag
+	// image actually replaces the running pod. This flag is the
+	// entry point for the same-tag local-rebuild dev loop. No-op outside
+	// reuse mode beyond the kind load itself (fresh bootstraps deploy with
+	// the loaded image immediately).
 	LoadImageToCluster bool
 }
 
-// Bootstrap sets up the minimum set of components of an openMCP installation and returns the platform cluster name
+// Bootstrap sets up the minimum set of components of an openMCP installation and returns the platform cluster name.
+//
+// The platform kind cluster name comes from OpenMCPSetup.PlatformClusterName
+// (default DefaultPlatformClusterName). When E2E_REUSE_CLUSTER is truthy, the
+// kind cluster is reused across runs (kind's own Create handles the existence
+// case) and the framework Finish/cleanup hooks are not registered so the
+// cluster survives.
 func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) string {
 	kindConfig := internal.MustTmpFileFromEmbedFS(configFS, "config/kind-config.yaml")
 	operatorTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/operator.yaml.tmpl")
-	platformClusterName := envconf.RandomName("platform", 16)
+	platformClusterName := s.PlatformClusterName
+	if platformClusterName == "" {
+		platformClusterName = DefaultPlatformClusterName
+	}
+	reuseMode := IsReuseMode()
+	if reuseMode {
+		klog.Infof("reuse mode on: kind cluster %q (%s=true)", platformClusterName, EnvReuseCluster)
+	}
 	s.Operator.Namespace = s.Namespace
 	testenv.Setup(createPlatformCluster(platformClusterName, kindConfig)).
-		Setup(envfuncs.CreateNamespace(s.Namespace)).
+		Setup(createNamespaceIdempotent(s.Namespace)).
 		Setup(s.loadImagesToCluster(platformClusterName)).
 		Setup(s.installOpenMCPOperator(operatorTemplate)).
 		Setup(s.installClusterProviders()).
@@ -66,14 +96,33 @@ func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) string {
 		Setup(s.verifyEnvironment()).
 		Setup(s.installPlatformServices()).
 		Setup(s.installServiceProviders()).
-		Finish(s.cleanup(kindConfig, operatorTemplate)).
-		Finish(envfuncs.DestroyCluster(platformClusterName))
+		Setup(s.rolloutOnReuseDeployments(operatorTemplate))
+	if !reuseMode {
+		testenv.
+			Finish(s.cleanup(kindConfig, operatorTemplate)).
+			Finish(envfuncs.DestroyCluster(platformClusterName))
+	}
 	return platformClusterName
 }
 
 func createPlatformCluster(name string, kindConfig string) types.EnvFunc {
 	klog.Info("create platform cluster...")
 	return envfuncs.CreateClusterWithConfig(kind.NewProvider(), name, kindConfig)
+}
+
+// createNamespaceIdempotent wraps envfuncs.CreateNamespace so a re-run against
+// an existing cluster does not error on AlreadyExists. It mirrors what
+// envfuncs.CreateNamespace puts on the env config (default namespace) so
+// downstream Setup steps see the same state regardless.
+func createNamespaceIdempotent(name string) types.EnvFunc {
+	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
+		ctx, err := envfuncs.CreateNamespace(name)(ctx, c)
+		if err != nil && apierrors.IsAlreadyExists(err) {
+			c.WithNamespace(name)
+			return ctx, nil
+		}
+		return ctx, err
+	}
 }
 
 func (s *OpenMCPSetup) cleanup(tmpFiles ...string) types.EnvFunc {
@@ -158,20 +207,20 @@ func (s *OpenMCPSetup) managePlatformCluster(platformClusterName string) env.Fun
 		klog.Info("create platform cluster resource...")
 
 		platformCluster := &unstructured.Unstructured{
-			Object: map[string]interface{}{
+			Object: map[string]any{
 				"apiVersion": "clusters.openmcp.cloud/v1alpha1",
 				"kind":       "Cluster",
-				"metadata": map[string]interface{}{
+				"metadata": map[string]any{
 					"name":      "platform",
 					"namespace": s.Namespace,
-					"annotations": map[string]string{
+					"annotations": map[string]any{
 						"kind.clusters.openmcp.cloud/name": platformClusterName,
 					},
 				},
-				"spec": map[string]interface{}{
-					"kubernetes": map[string]interface{}{},
+				"spec": map[string]any{
+					"kubernetes": map[string]any{},
 					"profile":    "kind",
-					"purposes": []interface{}{
+					"purposes": []any{
 						clustersv1alpha1.PURPOSE_PLATFORM,
 					},
 					"tenancy": string(clustersv1alpha1.TENANCY_SHARED),
@@ -180,7 +229,7 @@ func (s *OpenMCPSetup) managePlatformCluster(platformClusterName string) env.Fun
 		}
 
 		// Create the platform cluster object in Kubernetes
-		if createErr := c.Client().Resources().Create(ctx, platformCluster); createErr != nil {
+		if createErr := resources.CreateOrUpdate(ctx, c, platformCluster); createErr != nil {
 			return ctx, createErr
 		}
 
@@ -257,6 +306,50 @@ func Compose(envfuncs ...env.Func) env.Func {
 			var err error
 			if ctx, err = envfunc(ctx, cfg); err != nil {
 				return ctx, err
+			}
+		}
+		return ctx, nil
+	}
+}
+
+// rolloutOnReuseDeployments returns an env.Func that, when E2E_REUSE_CLUSTER
+// is set, deletes-and-recreates every component whose owning Setup struct has
+// LoadImageToCluster: true. SP/CP/PS each go through the operator's full
+// reconciliation (init job + run deployment + Ready). The Operator itself
+// gets its Deployment deleted and the operator manifest re-applied. No-op
+// outside reuse mode.
+func (s *OpenMCPSetup) rolloutOnReuseDeployments(operatorTemplate string) env.Func {
+	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
+		if !IsReuseMode() {
+			return ctx, nil
+		}
+		if s.Operator.LoadImageToCluster {
+			if err := recreateOperator(ctx, c, s.Operator, operatorTemplate); err != nil {
+				return ctx, fmt.Errorf("rollout operator %q: %w", s.Operator.Name, err)
+			}
+		}
+		for _, sp := range s.ServiceProviders {
+			if !sp.LoadImageToCluster {
+				continue
+			}
+			if err := recreateServiceProvider(ctx, c, sp.Name, sp.Image, sp.WaitOpts...); err != nil {
+				return ctx, fmt.Errorf("rollout service provider %q: %w", sp.Name, err)
+			}
+		}
+		for _, cp := range s.ClusterProviders {
+			if !cp.LoadImageToCluster {
+				continue
+			}
+			if err := recreateClusterProvider(ctx, c, cp.Name, cp.Image, cp.WaitOpts...); err != nil {
+				return ctx, fmt.Errorf("rollout cluster provider %q: %w", cp.Name, err)
+			}
+		}
+		for _, ps := range s.PlatformServices {
+			if !ps.LoadImageToCluster {
+				continue
+			}
+			if err := recreatePlatformService(ctx, c, ps.Name, ps.Image, ps.WaitOpts...); err != nil {
+				return ctx, fmt.Errorf("rollout platform service %q: %w", ps.Name, err)
 			}
 		}
 		return ctx, nil
