@@ -92,6 +92,6 @@ require (
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
 	sigs.k8s.io/controller-runtime v0.23.3 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
-	sigs.k8s.io/kind v0.31.0
+	sigs.k8s.io/kind v0.32.0
 	sigs.k8s.io/yaml v1.6.0
 )
