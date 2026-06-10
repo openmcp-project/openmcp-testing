@@ -38,8 +38,8 @@ spec:
 `
 
 const mcpTemplate = `
-apiVersion: core.openmcp.cloud/v2alpha1
-kind: ManagedControlPlaneV2
+apiVersion: core.open-control-plane.io/v2alpha1
+kind: ControlPlane
 metadata:
   name: {{.Name}}
 spec:
