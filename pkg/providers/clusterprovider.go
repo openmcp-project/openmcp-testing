@@ -38,8 +38,8 @@ spec:
 `
 
 const mcpTemplate = `
-apiVersion: core.openmcp.cloud/v2alpha1
-kind: ManagedControlPlaneV2
+apiVersion: core.open-control-plane.io/v2alpha1
+kind: ControlPlane
 metadata:
   name: {{.Name}}
 spec:
@@ -57,9 +57,9 @@ type ClusterProviderSetup struct {
 
 func mcpRef(ref types.NamespacedName) *unstructured.Unstructured {
 	return internal.UnstructuredRef(ref.Name, ref.Namespace, schema.GroupVersionKind{
-		Group:   "core.openmcp.cloud",
+		Group:   "core.open-control-plane.io",
 		Version: "v2alpha1",
-		Kind:    "managedcontrolplanev2",
+		Kind:    "controlplane",
 	})
 }
 
