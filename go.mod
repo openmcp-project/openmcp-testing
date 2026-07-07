@@ -1,6 +1,6 @@
 module github.com/openmcp-project/openmcp-testing
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/fluxcd/flux2/v2 v2.8.8
