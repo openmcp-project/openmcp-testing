@@ -4,7 +4,7 @@ go 1.26.5
 
 require (
 	github.com/fluxcd/flux2/v2 v2.8.8
-	github.com/fluxcd/helm-controller/api v1.6.0
+	github.com/fluxcd/helm-controller/api v1.6.2
 	github.com/fluxcd/kustomize-controller/api v1.9.0
 	github.com/fluxcd/source-controller/api v1.9.0
 	github.com/openmcp-project/openmcp-operator/api v1.1.0
@@ -30,8 +30,8 @@ require (
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
-	github.com/fluxcd/pkg/apis/kustomize v1.19.0 // indirect
-	github.com/fluxcd/pkg/apis/meta v1.30.0 // indirect
+	github.com/fluxcd/pkg/apis/kustomize v1.19.1 // indirect
+	github.com/fluxcd/pkg/apis/meta v1.30.1 // indirect
 	github.com/fluxcd/pkg/kustomize v1.27.2 // indirect
 	github.com/fluxcd/pkg/tar v0.17.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
