@@ -3,10 +3,10 @@ module github.com/openmcp-project/openmcp-testing
 go 1.26.5
 
 require (
-	github.com/fluxcd/flux2/v2 v2.8.8
-	github.com/fluxcd/helm-controller/api v1.6.0
-	github.com/fluxcd/kustomize-controller/api v1.9.0
-	github.com/fluxcd/source-controller/api v1.9.0
+	github.com/fluxcd/flux2/v2 v2.9.1
+	github.com/fluxcd/helm-controller/api v1.6.2
+	github.com/fluxcd/kustomize-controller/api v1.9.2
+	github.com/fluxcd/source-controller/api v1.9.2
 	github.com/openmcp-project/openmcp-operator/api v1.1.0
 	github.com/stretchr/testify v1.11.1
 	k8s.io/api v0.36.2
@@ -14,7 +14,7 @@ require (
 	k8s.io/client-go v0.36.2
 	k8s.io/klog/v2 v2.140.0
 	sigs.k8s.io/e2e-framework v0.7.0
-	sigs.k8s.io/gateway-api v1.5.1
+	sigs.k8s.io/gateway-api v1.6.0
 	sigs.k8s.io/kind v0.32.0
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -30,10 +30,10 @@ require (
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
-	github.com/fluxcd/pkg/apis/kustomize v1.19.0 // indirect
-	github.com/fluxcd/pkg/apis/meta v1.30.0 // indirect
-	github.com/fluxcd/pkg/kustomize v1.27.2 // indirect
-	github.com/fluxcd/pkg/tar v0.17.0 // indirect
+	github.com/fluxcd/pkg/apis/kustomize v1.19.1 // indirect
+	github.com/fluxcd/pkg/apis/meta v1.30.1 // indirect
+	github.com/fluxcd/pkg/kustomize v1.35.2 // indirect
+	github.com/fluxcd/pkg/tar v1.2.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
@@ -75,8 +75,8 @@ require (
 	github.com/vladimirvivien/gexe v0.5.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xlab/treeprint v1.2.0 // indirect
-	go.opentelemetry.io/otel v1.41.0 // indirect
-	go.opentelemetry.io/otel/trace v1.41.0 // indirect
+	go.opentelemetry.io/otel v1.43.0 // indirect
+	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/net v0.56.0 // indirect
