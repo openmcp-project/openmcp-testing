@@ -7,7 +7,7 @@ require (
 	github.com/fluxcd/helm-controller/api v1.6.2
 	github.com/fluxcd/kustomize-controller/api v1.9.2
 	github.com/fluxcd/source-controller/api v1.9.2
-	github.com/openmcp-project/openmcp-operator/api v1.1.0
+	github.com/openmcp-project/openmcp-operator/api v1.2.0
 	github.com/stretchr/testify v1.11.1
 	k8s.io/api v0.36.2
 	k8s.io/apimachinery v0.36.2
