@@ -1,5 +1,13 @@
 apiVersion: kind.x-k8s.io/v1alpha4
 kind: Cluster
+kubeadmConfigPatches:
+  - |
+    apiVersion: kubeadm.k8s.io/v1beta3
+    kind: ClusterConfiguration
+    etcd:
+      local:
+        extraArgs:
+          quota-backend-bytes: "536870912"
 nodes:
   - role: control-plane
     extraMounts:

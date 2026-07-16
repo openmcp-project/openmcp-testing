@@ -21,13 +21,14 @@ import (
 // FluxCD is a GitOps continuous delivery solution for Kubernetes that keeps clusters in sync
 // with configuration sources (like Git repositories) and automates configuration updates.
 //
-// This extension installs the following FluxCD components:
+// This extension installs the following FluxCD components by default:
 //   - source-controller: Handles source definitions (Git, Helm, OCI repositories)
 //   - kustomize-controller: Applies Kustomize overlays from sources
 //   - helm-controller: Manages Helm releases
 //   - notification-controller: Handles event notifications and webhooks
-//   - image-reflector-controller: Scans container registries for image metadata
-//   - image-automation-controller: Automates image updates in Git
+//
+// Additional components (e.g. image-reflector-controller, image-automation-controller) can be
+// enabled via the ExtraComponents field.
 //
 // All components are installed into the specified namespace (defaults to "flux-system").
 //
@@ -44,6 +45,10 @@ type FluxCD struct {
 	// Namespace is the Kubernetes namespace where FluxCD components will be installed.
 	// If empty, defaults to "flux-system".
 	Namespace string
+	// ExtraComponents lists additional FluxCD components to install beyond the default set
+	// (source-controller, kustomize-controller, helm-controller, notification-controller).
+	// Example: []string{"image-reflector-controller", "image-automation-controller"}
+	ExtraComponents []string
 }
 
 // Name returns the unique identifier for this extension.
@@ -80,10 +85,7 @@ func (f *FluxCD) Install(ctx context.Context, cfg *envconf.Config) error {
 		"helm-controller",
 		"notification-controller",
 	}
-	options.ComponentsExtra = []string{
-		"image-reflector-controller",
-		"image-automation-controller",
-	}
+	options.ComponentsExtra = f.ExtraComponents
 
 	manifest, err := fluxinstall.Generate(options, "")
 	if err != nil {
