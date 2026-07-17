@@ -8,10 +8,6 @@ import (
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	providerv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
 
-	"github.com/openmcp-project/openmcp-testing/internal"
-	"github.com/openmcp-project/openmcp-testing/pkg/clusterutils"
-	openmcpconditions "github.com/openmcp-project/openmcp-testing/pkg/conditions"
-	"github.com/openmcp-project/openmcp-testing/pkg/resources"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -21,6 +17,11 @@ import (
 	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/features"
+
+	"github.com/openmcp-project/openmcp-testing/internal"
+	"github.com/openmcp-project/openmcp-testing/pkg/clusterutils"
+	openmcpconditions "github.com/openmcp-project/openmcp-testing/pkg/conditions"
+	"github.com/openmcp-project/openmcp-testing/pkg/resources"
 )
 
 const clusterProviderTemplate = `
