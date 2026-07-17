@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{.Name}}
+  namespace: {{.Namespace}}
+data:
+  config: |
+    managedControlPlane:
+      mcpClusterPurpose: mcp
+    scheduler:
+      scope: Cluster
+      purposeMappings:
+        {{- range .ExtraClusterPurposeMapping }}
+        {{ .Purpose}}:
+          template:
+            spec:
+              profile: {{.Profile}}
+              tenancy: {{ .Tenancy }}
+        {{- end }}
+---

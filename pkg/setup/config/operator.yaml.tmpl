@@ -29,26 +29,13 @@ data:
     scheduler:
       scope: Cluster
       purposeMappings:
-        mcp:
+        {{- range .ExtraClusterPurposeMapping }}
+        {{ .Purpose}}:
           template:
             spec:
-              profile: kind
-              tenancy: Exclusive
-        platform:
-          template:
-            spec:
-              profile: kind
-              tenancy: Shared
-        onboarding:
-          template:
-            spec:
-              profile: kind
-              tenancy: Shared
-        workload:
-          template:
-            spec:
-              profile: kind
-              tenancy: Shared
+              profile: {{.Profile}}
+              tenancy: {{ .Tenancy }}
+        {{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
