@@ -2,7 +2,11 @@ package providers
 
 import (
 	"context"
+	"fmt"
 	"testing"
+
+	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	providerv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -53,6 +57,15 @@ type ClusterProviderSetup struct {
 	WaitOpts []wait.Option
 	// LoadImageToCluster allows using local images that have to be loaded into the kind cluster
 	LoadImageToCluster bool
+	// DeploymentSpec allows detailed deployment configuration.
+	DeploymentSpec *providerv1alpha1.DeploymentSpec
+}
+
+// ClusterPurposeMapping is used to configure the openmcp-operator cluster scheduler
+type ClusterPurposeMapping struct {
+	Purpose string
+	Profile string
+	Tenancy clustersv1alpha1.Tenancy
 }
 
 func mcpRef(ref types.NamespacedName) *unstructured.Unstructured {
@@ -102,6 +115,20 @@ func clusterRequestRefList() *unstructured.UnstructuredList {
 // InstallClusterProvider creates a cluster provider object on the platform cluster and waits until it is ready
 func InstallClusterProvider(ctx context.Context, c *envconf.Config, clusterProvider ClusterProviderSetup) error {
 	klog.Infof("create cluster provider %s", clusterProvider.Name)
+	if clusterProvider.DeploymentSpec != nil {
+		// create cluster provider based on deployment spec instead of template
+		if err := providerv1alpha1.AddToScheme(c.Client().Resources().GetScheme()); err != nil {
+			return fmt.Errorf("failed to add provider scheme: %w", err)
+		}
+		cp := &providerv1alpha1.ClusterProvider{}
+		cp.Name = clusterProvider.Name
+		cp.Spec.DeploymentSpec = *clusterProvider.DeploymentSpec
+		cp.Spec.Image = clusterProvider.Image
+		if err := c.Client().Resources().Create(ctx, cp); err != nil {
+			return fmt.Errorf("failed to install ClusterProvider based on DeploymentSpec: %w", err)
+		}
+		return wait.For(openmcpconditions.Match(cp, c, "Ready", corev1.ConditionTrue), clusterProvider.WaitOpts...)
+	}
 	obj, err := resources.CreateObjectFromTemplate(ctx, c, clusterProviderTemplate, clusterProvider)
 	if err != nil {
 		return err

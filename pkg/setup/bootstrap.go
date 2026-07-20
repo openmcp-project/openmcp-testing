@@ -48,6 +48,8 @@ type OpenMCPOperatorSetup struct {
 	WaitOpts     []wait.Option
 	// LoadImageToCluster allows using local images that have to be loaded into the kind cluster
 	LoadImageToCluster bool
+	// ExtraClusterPurposeMapping allows to provide additional cluster purpose mappings for the cluster scheduler
+	ExtraClusterPurposeMapping []providers.ClusterPurposeMapping
 }
 
 // Bootstrap sets up the minimum set of components of an openMCP installation and returns the platform cluster name
@@ -114,6 +116,31 @@ func (s *OpenMCPSetup) verifyEnvironment() types.EnvFunc {
 
 func (s *OpenMCPSetup) installOpenMCPOperator(tmpl string) types.EnvFunc {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
+		// default purpose mapping
+		purposeMapping := []providers.ClusterPurposeMapping{
+			{
+				Purpose: "mcp",
+				Profile: "kind",
+				Tenancy: "Exclusive",
+			},
+			{
+				Purpose: "platform",
+				Profile: "kind",
+				Tenancy: "Shared",
+			},
+			{
+				Purpose: "onboarding",
+				Profile: "kind",
+				Tenancy: "Shared",
+			},
+			{
+				Purpose: "workload",
+				Profile: "kind",
+				Tenancy: "Shared",
+			},
+		}
+		s.Operator.ExtraClusterPurposeMapping = append(s.Operator.ExtraClusterPurposeMapping, purposeMapping...)
+
 		// apply openmcp operator manifests
 		if _, err := resources.CreateObjectsFromTemplateFile(ctx, c, tmpl, s.Operator); err != nil {
 			return ctx, err

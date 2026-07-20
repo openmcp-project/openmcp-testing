@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openmcp-operator
+  namespace: openmcp-system
+data:
+  config: |
+    managedControlPlane:
+      mcpClusterPurpose: mcp
+    scheduler:
+      scope: Cluster
+      purposeMappings:
+        test1:
+          template:
+            spec:
+              profile: profile1
+              tenancy: Shared
+        test2:
+          template:
+            spec:
+              profile: profile2
+              tenancy: Exclusive
+---
