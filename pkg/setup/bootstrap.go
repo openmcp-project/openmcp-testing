@@ -94,8 +94,7 @@ func (s *OpenMCPSetup) cleanup(tmpFiles ...string) types.EnvFunc {
 				klog.Errorf("delete platform service failed: %v", err)
 			}
 		}
-		if err := providers.DeleteCluster(ctx, c, apimachinerytypes.NamespacedName{Namespace: s.Namespace, Name: "onboarding"},
-			s.WaitOpts...); err != nil {
+		if err := providers.DeleteCluster(ctx, c, apimachinerytypes.NamespacedName{Namespace: s.Namespace, Name: "onboarding"}); err != nil {
 			klog.Errorf("delete cluster failed: %v", err)
 		}
 		for _, cp := range s.ClusterProviders {
