@@ -176,31 +176,24 @@ func (s *OpenMCPSetup) managePlatformCluster(platformClusterName string) env.Fun
 			return ctx, fmt.Errorf("no cluster providers found")
 		}
 
-		// Use the first cluster provider for the platform cluster
-		// TODO: Consider adding explicit PlatformClusterProvider field to OpenMCPSetup
-		platformClusterClusterProvider := s.ClusterProviders[0]
+		klog.Info("create platform cluster resource (provider: kind)...")
 
-		klog.Infof("create platform cluster resource (provider: %s)...", platformClusterClusterProvider.Name)
-
-		metadata := map[string]interface{}{
-			"name":      "platform",
-			"namespace": s.Namespace,
-		}
-		// kind provider needs the cluster name annotation to locate the kind cluster
-		if platformClusterClusterProvider.Name == "kind" {
-			metadata["annotations"] = map[string]string{
-				"kind.clusters.openmcp.cloud/name": platformClusterName,
-			}
-		}
-
+		// The platform cluster is always the kind cluster created by Bootstrap —
+		// use kind profile + annotation regardless of which provider handles other clusters.
 		platformCluster := &unstructured.Unstructured{
 			Object: map[string]interface{}{
 				"apiVersion": "clusters.openmcp.cloud/v1alpha1",
 				"kind":       "Cluster",
-				"metadata":   metadata,
+				"metadata": map[string]interface{}{
+					"name":      "platform",
+					"namespace": s.Namespace,
+					"annotations": map[string]string{
+						"kind.clusters.openmcp.cloud/name": platformClusterName,
+					},
+				},
 				"spec": map[string]interface{}{
 					"kubernetes": map[string]interface{}{},
-					"profile":    platformClusterClusterProvider.Name,
+					"profile":    "kind",
 					"purposes": []interface{}{
 						clustersv1alpha1.PURPOSE_PLATFORM,
 					},

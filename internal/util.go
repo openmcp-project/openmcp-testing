@@ -61,6 +61,15 @@ func IgnoreNotFound(err error) error {
 	return err
 }
 
+// IgnoreNoMatchError returns no error when the error indicates the API group/resource
+// is not (yet) registered on the server (e.g. CRD not yet installed).
+func IgnoreNoMatchError(err error) error {
+	if err != nil && strings.Contains(err.Error(), "no matches for") {
+		return nil
+	}
+	return err
+}
+
 // UnstructuredRef returns an empty object with its identifying properties set
 func UnstructuredRef(name string, namespace string, gvk schema.GroupVersionKind) *unstructured.Unstructured {
 	obj := &unstructured.Unstructured{}
