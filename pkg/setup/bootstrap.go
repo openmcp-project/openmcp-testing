@@ -142,8 +142,22 @@ func (s *OpenMCPSetup) installOpenMCPOperator(tmpl string) types.EnvFunc {
 				Tenancy: "Shared",
 			},
 		}
-		// User-provided mappings override defaults — prepend defaults so user entries win
-		s.Operator.ExtraClusterPurposeMapping = append(purposeMapping, s.Operator.ExtraClusterPurposeMapping...)
+		// Merge: user-provided mappings override defaults by purpose.
+		seen := map[string]bool{}
+		merged := make([]providers.ClusterPurposeMapping, 0, len(purposeMapping)+len(s.Operator.ExtraClusterPurposeMapping))
+		for _, m := range s.Operator.ExtraClusterPurposeMapping {
+			if !seen[m.Purpose] {
+				seen[m.Purpose] = true
+				merged = append(merged, m)
+			}
+		}
+		for _, m := range purposeMapping {
+			if !seen[m.Purpose] {
+				seen[m.Purpose] = true
+				merged = append(merged, m)
+			}
+		}
+		s.Operator.ExtraClusterPurposeMapping = merged
 
 		// apply openmcp operator manifests
 		if _, err := resources.CreateObjectsFromTemplateFile(ctx, c, tmpl, s.Operator); err != nil {
