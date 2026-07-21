@@ -84,6 +84,10 @@ func (s *OpenMCPSetup) cleanup(tmpFiles ...string) types.EnvFunc {
 		for _, f := range tmpFiles {
 			os.RemoveAll(f)
 		}
+		if _, err := c.NewClient(); err != nil {
+			klog.Warningf("no k8s client available for cleanup (setup may have failed early): %v", err)
+			return ctx, nil
+		}
 		for _, sp := range s.ServiceProviders {
 			if err := providers.DeleteServiceProvider(ctx, c, sp.Name, sp.WaitOpts...); err != nil {
 				klog.Errorf("delete service provider failed: %v", err)
@@ -138,7 +142,8 @@ func (s *OpenMCPSetup) installOpenMCPOperator(tmpl string) types.EnvFunc {
 				Tenancy: "Shared",
 			},
 		}
-		s.Operator.ExtraClusterPurposeMapping = append(s.Operator.ExtraClusterPurposeMapping, purposeMapping...)
+		// User-provided mappings override defaults — prepend defaults so user entries win
+		s.Operator.ExtraClusterPurposeMapping = append(purposeMapping, s.Operator.ExtraClusterPurposeMapping...)
 
 		// apply openmcp operator manifests
 		if _, err := resources.CreateObjectsFromTemplateFile(ctx, c, tmpl, s.Operator); err != nil {
