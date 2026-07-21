@@ -166,7 +166,7 @@ func (s *OpenMCPSetup) installClusterProviders() env.Func {
 	}
 }
 
-func (s *OpenMCPSetup) managePlatformCluster(platformClusterName string) env.Func {
+func (s *OpenMCPSetup) managePlatformCluster(_ string) env.Func {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		if len(s.ClusterProviders) == 0 {
 			return ctx, fmt.Errorf("no cluster providers found")
@@ -176,13 +176,7 @@ func (s *OpenMCPSetup) managePlatformCluster(platformClusterName string) env.Fun
 		// TODO: Consider adding explicit PlatformClusterProvider field to OpenMCPSetup
 		platformClusterClusterProvider := s.ClusterProviders[0]
 
-		// Currently only kind provider is supported for platform cluster management
-		if platformClusterClusterProvider.Name != "kind" {
-			klog.Warningf("platform cluster provider type '%s' is not 'kind', skipping platform cluster resource creation", platformClusterClusterProvider.Name)
-			return ctx, nil
-		}
-
-		klog.Info("create platform cluster resource...")
+		klog.Infof("create platform cluster resource (provider: %s)...", platformClusterClusterProvider.Name)
 
 		platformCluster := &unstructured.Unstructured{
 			Object: map[string]interface{}{
@@ -191,13 +185,10 @@ func (s *OpenMCPSetup) managePlatformCluster(platformClusterName string) env.Fun
 				"metadata": map[string]interface{}{
 					"name":      "platform",
 					"namespace": s.Namespace,
-					"annotations": map[string]string{
-						"kind.clusters.openmcp.cloud/name": platformClusterName,
-					},
 				},
 				"spec": map[string]interface{}{
 					"kubernetes": map[string]interface{}{},
-					"profile":    "kind",
+					"profile":    platformClusterClusterProvider.Name,
 					"purposes": []interface{}{
 						clustersv1alpha1.PURPOSE_PLATFORM,
 					},

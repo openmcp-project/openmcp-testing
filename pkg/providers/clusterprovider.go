@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	providerv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
@@ -200,6 +201,11 @@ func ClustersReady(ctx context.Context, c *envconf.Config, options ...wait.Optio
 // DeleteCluster deletes the referenced cluster object by deleting every cluster request that belongs to this cluster
 func DeleteCluster(ctx context.Context, c *envconf.Config, ref types.NamespacedName, options ...wait.Option) error {
 	klog.Infof("delete cluster: %s", ref)
+	// Apply a default timeout of 5 minutes when none is provided, to avoid blocking
+	// forever on clusters with stuck finalizers (e.g. k0smotron).
+	if len(options) == 0 {
+		options = []wait.Option{wait.WithTimeout(5 * time.Minute)}
+	}
 	// loop delete for cluster requests with status.clusters.name = ref.name
 	clusterRequestList := clusterRequestRefList()
 	if err := c.Client().Resources().WithNamespace(ref.Namespace).List(ctx, clusterRequestList); err != nil {

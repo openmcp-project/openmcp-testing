@@ -35,6 +35,13 @@ var clusterProvider = func() ClusterProvider {
 	return cluster.NewProvider()
 }
 
+// SetClusterProvider overrides the default kind-based cluster provider.
+// Call this in TestMain before using ConfigByPrefix or OnboardingConfig
+// when using a non-kind cluster provider (e.g. k0smotron).
+func SetClusterProvider(p ClusterProvider) {
+	clusterProvider = func() ClusterProvider { return p }
+}
+
 type ListResources interface {
 	List(ctx context.Context, objs k8s.ObjectList, opts ...k8sresources.ListOption) error
 }
