@@ -7,6 +7,7 @@ import (
 	"os"
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -229,13 +230,24 @@ func (s *OpenMCPSetup) managePlatformCluster(platformClusterName string) env.Fun
 func (s *OpenMCPSetup) installExtensions() env.Func {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		klog.Info("install extensions...")
+		g, gctx := errgroup.WithContext(ctx)
 		for _, ext := range s.Extensions {
-			klog.Infof("install extension %s", ext.Name())
-			if installErr := ext.Install(ctx, c); installErr != nil {
-				return ctx, fmt.Errorf("install extension %s failed: %v", ext.Name(), installErr)
-			}
-			if schemeErr := ext.RegisterSchemes(ctx, c.Client().Resources().GetScheme()); schemeErr != nil {
-				return ctx, fmt.Errorf("install extension scheme %s failed: %v", ext.Name(), schemeErr)
+			ext := ext
+			g.Go(func() error {
+				klog.Infof("install extension %s", ext.Name())
+				if err := ext.Install(gctx, c); err != nil {
+					return fmt.Errorf("install extension %s failed: %w", ext.Name(), err)
+				}
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return ctx, err
+		}
+		// RegisterSchemes is sequential — it modifies shared scheme state.
+		for _, ext := range s.Extensions {
+			if err := ext.RegisterSchemes(ctx, c.Client().Resources().GetScheme()); err != nil {
+				return ctx, fmt.Errorf("install extension scheme %s failed: %v", ext.Name(), err)
 			}
 		}
 		return ctx, nil

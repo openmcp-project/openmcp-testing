@@ -9,6 +9,7 @@ require (
 	github.com/fluxcd/source-controller/api v1.9.3
 	github.com/openmcp-project/openmcp-operator/api v1.3.0
 	github.com/stretchr/testify v1.11.1
+	golang.org/x/sync v0.22.0
 	k8s.io/api v0.36.2
 	k8s.io/apimachinery v0.36.2
 	k8s.io/client-go v0.36.2
