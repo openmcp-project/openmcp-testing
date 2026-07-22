@@ -3,7 +3,9 @@ package providers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
+	"time"
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	providerv1alpha1 "github.com/openmcp-project/openmcp-operator/api/provider/v1alpha1"
@@ -151,8 +153,20 @@ func CreateMCP(name string, opts ...wait.Option) features.Func {
 			t.Error(err)
 			return ctx
 		}
-		obj, err := resources.CreateObjectFromTemplate(ctx, onboardingCfg, mcpTemplate, struct{ Name string }{Name: name})
-		if err != nil {
+		// The ControlPlane CRD may not yet be installed on the onboarding cluster when
+		// we first attempt creation — retry until the API group is available.
+		var obj *unstructured.Unstructured
+		if err := wait.For(func(ctx context.Context) (bool, error) {
+			var createErr error
+			obj, createErr = resources.CreateObjectFromTemplate(ctx, onboardingCfg, mcpTemplate, struct{ Name string }{Name: name})
+			if createErr != nil {
+				if strings.Contains(createErr.Error(), "no matches for") {
+					return false, nil
+				}
+				return false, createErr
+			}
+			return true, nil
+		}, append([]wait.Option{wait.WithTimeout(2 * time.Minute), wait.WithInterval(5 * time.Second)}, opts...)...); err != nil {
 			t.Errorf("failed to create MCP: %v", err)
 			return ctx
 		}
@@ -181,6 +195,9 @@ func DeleteMCP(name string, opts ...wait.Option) features.Func {
 		})
 		err = resources.DeleteObject(ctx, onboardingCfg, mcp, opts...)
 		if err != nil {
+			if strings.Contains(err.Error(), "no matches for") {
+				return ctx
+			}
 			t.Errorf("failed to delete MCP %s: %v", name, err)
 			return ctx
 		}
@@ -200,6 +217,11 @@ func ClustersReady(ctx context.Context, c *envconf.Config, options ...wait.Optio
 // DeleteCluster deletes the referenced cluster object by deleting every cluster request that belongs to this cluster
 func DeleteCluster(ctx context.Context, c *envconf.Config, ref types.NamespacedName, options ...wait.Option) error {
 	klog.Infof("delete cluster: %s", ref)
+	// Apply a default timeout of 5 minutes when none is provided, to avoid blocking
+	// forever on clusters with stuck finalizers (e.g. k0smotron).
+	if len(options) == 0 {
+		options = []wait.Option{wait.WithTimeout(5 * time.Minute)}
+	}
 	// loop delete for cluster requests with status.clusters.name = ref.name
 	clusterRequestList := clusterRequestRefList()
 	if err := c.Client().Resources().WithNamespace(ref.Namespace).List(ctx, clusterRequestList); err != nil {

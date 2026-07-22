@@ -7,6 +7,7 @@ import (
 	"os"
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	apimachinerytypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog/v2"
@@ -84,6 +85,10 @@ func (s *OpenMCPSetup) cleanup(tmpFiles ...string) types.EnvFunc {
 		for _, f := range tmpFiles {
 			os.RemoveAll(f)
 		}
+		if _, err := c.NewClient(); err != nil {
+			klog.Warningf("no k8s client available for cleanup (setup may have failed early): %v", err)
+			return ctx, nil
+		}
 		for _, sp := range s.ServiceProviders {
 			if err := providers.DeleteServiceProvider(ctx, c, sp.Name, sp.WaitOpts...); err != nil {
 				klog.Errorf("delete service provider failed: %v", err)
@@ -94,8 +99,7 @@ func (s *OpenMCPSetup) cleanup(tmpFiles ...string) types.EnvFunc {
 				klog.Errorf("delete platform service failed: %v", err)
 			}
 		}
-		if err := providers.DeleteCluster(ctx, c, apimachinerytypes.NamespacedName{Namespace: s.Namespace, Name: "onboarding"},
-			s.WaitOpts...); err != nil {
+		if err := providers.DeleteCluster(ctx, c, apimachinerytypes.NamespacedName{Namespace: s.Namespace, Name: "onboarding"}); err != nil {
 			klog.Errorf("delete cluster failed: %v", err)
 		}
 		for _, cp := range s.ClusterProviders {
@@ -139,7 +143,22 @@ func (s *OpenMCPSetup) installOpenMCPOperator(tmpl string) types.EnvFunc {
 				Tenancy: "Shared",
 			},
 		}
-		s.Operator.ExtraClusterPurposeMapping = append(s.Operator.ExtraClusterPurposeMapping, purposeMapping...)
+		// Merge: user-provided mappings override defaults by purpose.
+		seen := map[string]bool{}
+		merged := make([]providers.ClusterPurposeMapping, 0, len(purposeMapping)+len(s.Operator.ExtraClusterPurposeMapping))
+		for _, m := range s.Operator.ExtraClusterPurposeMapping {
+			if !seen[m.Purpose] {
+				seen[m.Purpose] = true
+				merged = append(merged, m)
+			}
+		}
+		for _, m := range purposeMapping {
+			if !seen[m.Purpose] {
+				seen[m.Purpose] = true
+				merged = append(merged, m)
+			}
+		}
+		s.Operator.ExtraClusterPurposeMapping = merged
 
 		// apply openmcp operator manifests
 		if _, err := resources.CreateObjectsFromTemplateFile(ctx, c, tmpl, s.Operator); err != nil {
@@ -172,18 +191,10 @@ func (s *OpenMCPSetup) managePlatformCluster(platformClusterName string) env.Fun
 			return ctx, fmt.Errorf("no cluster providers found")
 		}
 
-		// Use the first cluster provider for the platform cluster
-		// TODO: Consider adding explicit PlatformClusterProvider field to OpenMCPSetup
-		platformClusterClusterProvider := s.ClusterProviders[0]
+		klog.Info("create platform cluster resource (provider: kind)...")
 
-		// Currently only kind provider is supported for platform cluster management
-		if platformClusterClusterProvider.Name != "kind" {
-			klog.Warningf("platform cluster provider type '%s' is not 'kind', skipping platform cluster resource creation", platformClusterClusterProvider.Name)
-			return ctx, nil
-		}
-
-		klog.Info("create platform cluster resource...")
-
+		// The platform cluster is always the kind cluster created by Bootstrap —
+		// use kind profile + annotation regardless of which provider handles other clusters.
 		platformCluster := &unstructured.Unstructured{
 			Object: map[string]interface{}{
 				"apiVersion": "clusters.openmcp.cloud/v1alpha1",
@@ -219,13 +230,24 @@ func (s *OpenMCPSetup) managePlatformCluster(platformClusterName string) env.Fun
 func (s *OpenMCPSetup) installExtensions() env.Func {
 	return func(ctx context.Context, c *envconf.Config) (context.Context, error) {
 		klog.Info("install extensions...")
+		g, gctx := errgroup.WithContext(ctx)
 		for _, ext := range s.Extensions {
-			klog.Infof("install extension %s", ext.Name())
-			if installErr := ext.Install(ctx, c); installErr != nil {
-				return ctx, fmt.Errorf("install extension %s failed: %v", ext.Name(), installErr)
-			}
-			if schemeErr := ext.RegisterSchemes(ctx, c.Client().Resources().GetScheme()); schemeErr != nil {
-				return ctx, fmt.Errorf("install extension scheme %s failed: %v", ext.Name(), schemeErr)
+			ext := ext
+			g.Go(func() error {
+				klog.Infof("install extension %s", ext.Name())
+				if err := ext.Install(gctx, c); err != nil {
+					return fmt.Errorf("install extension %s failed: %w", ext.Name(), err)
+				}
+				return nil
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return ctx, err
+		}
+		// RegisterSchemes is sequential — it modifies shared scheme state.
+		for _, ext := range s.Extensions {
+			if err := ext.RegisterSchemes(ctx, c.Client().Resources().GetScheme()); err != nil {
+				return ctx, fmt.Errorf("install extension scheme %s failed: %v", ext.Name(), err)
 			}
 		}
 		return ctx, nil
