@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"strings"
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	"golang.org/x/sync/errgroup"
@@ -38,6 +39,10 @@ type OpenMCPSetup struct {
 	PlatformServices []platformservices.PlatformServiceSetup
 	Extensions       []extensions.Extension
 	WaitOpts         []wait.Option
+	// ContainerdMirrors maps a registry hostname (e.g. "ghcr.io") to a mirror
+	// endpoint (e.g. "http://localhost:5000"). When set, the kind cluster config
+	// is patched so containerd routes pulls for that registry through the mirror.
+	ContainerdMirrors map[string]string
 }
 
 type OpenMCPOperatorSetup struct {
@@ -56,6 +61,11 @@ type OpenMCPOperatorSetup struct {
 // Bootstrap sets up the minimum set of components of an openMCP installation and returns the platform cluster name
 func (s *OpenMCPSetup) Bootstrap(testenv env.Environment) string {
 	kindConfig := internal.MustTmpFileFromEmbedFS(configFS, "config/kind-config.yaml")
+	if len(s.ContainerdMirrors) > 0 {
+		if err := appendMirrorsToKindConfig(kindConfig, s.ContainerdMirrors); err != nil {
+			panic(fmt.Sprintf("failed to patch kind config with containerd mirrors: %v", err))
+		}
+	}
 	operatorTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/operator.yaml.tmpl")
 	platformClusterName := envconf.RandomName("platform", 16)
 	s.Operator.Namespace = s.Namespace
@@ -297,6 +307,27 @@ func (s *OpenMCPSetup) loadImagesToCluster(platformCluster string) env.Func {
 		}
 	}
 	return Compose(funcs...)
+}
+
+// appendMirrorsToKindConfig appends containerdConfigPatches to an existing
+// kind config YAML file so that containerd inside the cluster routes pulls
+// for the given registry hostnames through the provided mirror endpoints.
+func appendMirrorsToKindConfig(kindConfigFile string, mirrors map[string]string) error {
+	var patches strings.Builder
+	patches.WriteString("\ncontainerdConfigPatches:\n")
+	for registry, mirror := range mirrors {
+		patches.WriteString(fmt.Sprintf(`- |-
+  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."%s"]
+    endpoint = ["%s"]
+`, registry, mirror))
+	}
+	f, err := os.OpenFile(kindConfigFile, os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("open kind config: %w", err)
+	}
+	defer f.Close()
+	_, err = f.WriteString(patches.String())
+	return err
 }
 
 // Compose executes multiple env.Funcs in a row
