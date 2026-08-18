@@ -294,10 +294,7 @@ func appendMirrorsToKindConfig(kindConfigFile string, mirrors map[string]string)
 	var patches strings.Builder
 	patches.WriteString("\ncontainerdConfigPatches:\n")
 	for registry, mirror := range mirrors {
-		patches.WriteString(fmt.Sprintf(`- |-
-  [plugins."io.containerd.grpc.v1.cri".registry.mirrors."%s"]
-    endpoint = ["%s"]
-`, registry, mirror))
+		fmt.Fprintf(&patches, "- |-\n  [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"%s\"]\n    endpoint = [\"%s\"]\n", registry, mirror)
 	}
 	f, err := os.OpenFile(kindConfigFile, os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
