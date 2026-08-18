@@ -1,17 +1,17 @@
 module github.com/openmcp-project/openmcp-testing
 
-go 1.26.5
+go 1.26.6
 
 require (
-	github.com/fluxcd/flux2/v2 v2.9.2
-	github.com/fluxcd/helm-controller/api v1.6.2
-	github.com/fluxcd/kustomize-controller/api v1.9.3
-	github.com/fluxcd/source-controller/api v1.9.3
+	github.com/fluxcd/flux2/v2 v2.9.4
+	github.com/fluxcd/helm-controller/api v1.6.3
+	github.com/fluxcd/kustomize-controller/api v1.9.4
+	github.com/fluxcd/source-controller/api v1.9.4
 	github.com/openmcp-project/openmcp-operator/api v1.3.0
-	github.com/stretchr/testify v1.11.1
-	k8s.io/api v0.36.2
-	k8s.io/apimachinery v0.36.2
-	k8s.io/client-go v0.36.2
+	github.com/stretchr/testify v1.12.0
+	k8s.io/api v0.36.3
+	k8s.io/apimachinery v0.36.3
+	k8s.io/client-go v0.36.3
 	k8s.io/klog/v2 v2.140.0
 	sigs.k8s.io/e2e-framework v0.7.0
 	sigs.k8s.io/gateway-api v1.6.1
@@ -32,7 +32,7 @@ require (
 	github.com/fluxcd/pkg/apis/acl v0.10.0 // indirect
 	github.com/fluxcd/pkg/apis/kustomize v1.20.0 // indirect
 	github.com/fluxcd/pkg/apis/meta v1.30.1 // indirect
-	github.com/fluxcd/pkg/kustomize v1.35.3 // indirect
+	github.com/fluxcd/pkg/kustomize v1.35.4 // indirect
 	github.com/fluxcd/pkg/tar v1.2.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
@@ -65,7 +65,6 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
@@ -92,7 +91,7 @@ require (
 	k8s.io/apiextensions-apiserver v0.36.2 // indirect
 	k8s.io/component-base v0.36.2 // indirect
 	k8s.io/kube-openapi v0.0.0-20260603220949-865597e52e25 // indirect
-	k8s.io/streaming v0.36.2 // indirect
+	k8s.io/streaming v0.36.3 // indirect
 	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
 	sigs.k8s.io/controller-runtime v0.24.1 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
