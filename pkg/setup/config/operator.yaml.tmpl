@@ -32,6 +32,8 @@ data:
         {{- range .ExtraClusterPurposeMapping }}
         {{ .Purpose}}:
           template:
+            metadata:
+              namespace: openmcp-system
             spec:
               profile: {{.Profile}}
               tenancy: {{ .Tenancy }}
