@@ -1,0 +1,85 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: coredns
+  namespace: {{.Namespace}}
+spec:
+  interval: 1h
+  url: https://coredns.github.io/helm
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: coredns
+  namespace: {{.Namespace}}
+spec:
+  interval: 30m
+  chart:
+    spec:
+      chart: coredns
+      version: {{.CoreDNSChartVersion}}
+      sourceRef:
+        kind: HelmRepository
+        name: coredns
+        namespace: {{.Namespace}}
+      interval: 1h
+  install:
+    createNamespace: true
+  kubeConfig:
+    secretRef:
+      key: kubeconfig
+      name: {{.ClusterName}}.kubeconfig
+  values:
+    replicaCount: 1
+    isClusterService: false
+    serviceType: LoadBalancer
+    service:
+      name: coredns
+      # port: 53
+      annotations: {}
+      clusterIP: ""
+    servers:
+      - zones:
+          - zone: .
+        port: 53
+        plugins:
+          - name: errors
+          - name: debug # <── enables debug mode
+          - name: health
+            configBlock: |-
+              lameduck 5s
+          - name: ready
+          # to query kubernetes API for data
+          - name: kubernetes
+            parameters: cluster.local 10.0.0.0/24
+            configBlock: |-
+              pods insecure
+              fallthrough in-addr.arpa ip6.arpa
+              ttl 30
+          - name: etcd
+            parameters: {{.DNSZone}}
+            configBlock: |
+              stubzones
+              path /skydns
+              endpoint http://etcd.default.svc.cluster.local:2379
+              fallthrough
+          - name: log # <── log each DNS query
+          - name: forward
+            parameters: ". /etc/resolv.conf"
+          - name: cache
+            parameters: 30
+          - name: reload
+          - name: loop
+          - name: loadbalance
+    initContainers:
+      - name: resolv-check
+        image: busybox:1.37
+        command: ["sh", "-c", "echo '--- /etc/resolv.conf ---'; cat /etc/resolv.conf; echo '---------------------------'; nslookup kubernetes.default.svc.cluster.local || true; sleep 5"]
+    resources:
+      requests:
+        cpu: 100m
+        memory: 70Mi
+      limits:
+        memory: 170M
+  targetNamespace: default
+  storageNamespace: default
