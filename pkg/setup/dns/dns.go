@@ -9,11 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/openmcp-project/openmcp-testing/internal"
-	"github.com/openmcp-project/openmcp-testing/pkg/clusterutils"
-	"github.com/openmcp-project/openmcp-testing/pkg/conditions"
-	"github.com/openmcp-project/openmcp-testing/pkg/platformservices"
-	"github.com/openmcp-project/openmcp-testing/pkg/resources"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -25,6 +20,12 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 	kindcluster "sigs.k8s.io/kind/pkg/cluster"
+
+	"github.com/openmcp-project/openmcp-testing/internal"
+	"github.com/openmcp-project/openmcp-testing/pkg/clusterutils"
+	"github.com/openmcp-project/openmcp-testing/pkg/conditions"
+	"github.com/openmcp-project/openmcp-testing/pkg/platformservices"
+	"github.com/openmcp-project/openmcp-testing/pkg/resources"
 )
 
 const (

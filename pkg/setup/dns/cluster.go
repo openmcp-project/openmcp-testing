@@ -5,10 +5,11 @@ import (
 	"fmt"
 
 	"github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
-	"github.com/openmcp-project/openmcp-testing/pkg/providers"
-	"github.com/openmcp-project/openmcp-testing/pkg/resources"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
+
+	"github.com/openmcp-project/openmcp-testing/pkg/providers"
+	"github.com/openmcp-project/openmcp-testing/pkg/resources"
 
 	openmcpconditions "github.com/openmcp-project/openmcp-testing/pkg/conditions"
 )
