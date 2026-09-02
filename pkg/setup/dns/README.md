@@ -11,7 +11,7 @@ For simple test scenarios where a single hostname of a TLSRoute in cluster `A` n
 ```go
 // in your e2e FeatureBuilder
 ...
-Setup(dns.AddTLSRouteToKubeAPIServer(dns.HostConfig{
+Setup(dns.InjectTLSRouteHostAliasIntoKubeAPIServer(dns.HostConfig{
 	GatewayKey:  types.NamespacedName{Namespace: "openmcp-system", Name: "default"},
 	TLSRouteKey: types.NamespacedName{Namespace: "openmcp-system", Name: "foo-webhook"},
 })).

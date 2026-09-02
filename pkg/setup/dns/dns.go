@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
@@ -63,8 +64,8 @@ type ClusterConfig struct {
 // CreateExternalService deploys CoreDNS + etcd to a dedicated "dns" cluster together with platform service DNS to resemble a production like external DNS service.
 func CreateExternalService(config ClusterConfig) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-		gatewayv1.Install(c.Client().Resources().GetScheme())
-		gatewayv1alpha2.Install(c.Client().Resources().GetScheme())
+		runtime.Must(gatewayv1.Install(c.Client().Resources().GetScheme()))
+		runtime.Must(gatewayv1alpha2.Install(c.Client().Resources().GetScheme()))
 		// apply defaults
 		if config.Namespace == "" {
 			config.Namespace = defaultNamespace
@@ -145,12 +146,12 @@ type HostConfig struct {
 	Timeout *time.Duration
 }
 
-// AddTLSRouteToKubeAPIServer adds the retrieves the hostname of a TLSRoute and IP of a Gatway to Pod.Spec.HostAliases of a kube-apiserver.
+// InjectTLSRouteHostAliasIntoKubeAPIServer adds the retrieves the hostname of a TLSRoute and IP of a Gatway to Pod.Spec.HostAliases of a kube-apiserver.
 // The function waits for the kubelet to restart the kube-apiserver.
-func AddTLSRouteToKubeAPIServer(config HostConfig) features.Func {
+func InjectTLSRouteHostAliasIntoKubeAPIServer(config HostConfig) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-		gatewayv1.Install(c.Client().Resources().GetScheme())
-		gatewayv1alpha2.Install(c.Client().Resources().GetScheme())
+		runtime.Must(gatewayv1.Install(c.Client().Resources().GetScheme()))
+		runtime.Must(gatewayv1alpha2.Install(c.Client().Resources().GetScheme()))
 		openmcpSystemNamespace := config.Namespace
 		if openmcpSystemNamespace == "" {
 			openmcpSystemNamespace = defaultNamespace

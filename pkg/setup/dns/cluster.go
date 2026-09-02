@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 
@@ -69,7 +69,6 @@ func createCluster(ctx context.Context, config *envconf.Config, cr ClusterReques
 		RequestName: cr.Name,
 	}
 	arObj, err := resources.CreateObjectFromTemplate(ctx, config, accessRequestTemplate, ar)
-	v1alpha1.AddToScheme(config.Client().Resources().GetScheme())
 	if err != nil {
 		return fmt.Errorf("failed to create access request: %v", err)
 	}
@@ -77,11 +76,12 @@ func createCluster(ctx context.Context, config *envconf.Config, cr ClusterReques
 		return fmt.Errorf("access request failed to get ready: %v", err)
 	}
 	if err := wait.For(func(ctx context.Context) (bool, error) {
-		obj := &v1alpha1.AccessRequest{}
-		if err := config.Client().Resources().Get(ctx, ar.Name, ar.Namespace, obj); err != nil {
+		if err := config.Client().Resources().Get(ctx, ar.Name, ar.Namespace, arObj); err != nil {
 			return false, err
 		}
-		return obj.Status.SecretRef != nil, nil
+		// TODO verify this works as expected
+		_, found, err := unstructured.NestedFieldNoCopy(arObj.Object, "Status", "SecretRef")
+		return found, err
 	}); err != nil {
 		return fmt.Errorf("failed to retrieve kubeconfig of dns access request")
 	}
