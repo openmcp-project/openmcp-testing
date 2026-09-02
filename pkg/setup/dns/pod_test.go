@@ -3,10 +3,14 @@ package dns
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/yaml"
 )
 
 func Test_addHostAlias(t *testing.T) {
@@ -18,13 +22,13 @@ func Test_addHostAlias(t *testing.T) {
 		ip       string
 	}{
 		{
-			name:     "add host + ip to empty host aliases",
+			name:     "add host alias to empty pod spec",
 			pod:      &v1.Pod{},
 			hostName: "test.example.com",
 			ip:       "192.168.0.1",
 		},
 		{
-			name: "add host + ip to non-empty host aliases",
+			name: "add host alias to existing host alias spec",
 			pod: &v1.Pod{
 				Spec: v1.PodSpec{
 					HostAliases: []v1.HostAlias{
@@ -53,37 +57,6 @@ func Test_addHostAlias(t *testing.T) {
 	}
 }
 
-func Test_getStaticPod(t *testing.T) {
-	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
-		container string
-		file      string
-		want      *v1.Pod
-		wantErr   bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, gotErr := getStaticPod(tt.container, tt.file)
-			if gotErr != nil {
-				if !tt.wantErr {
-					t.Errorf("getStaticPod() failed: %v", gotErr)
-				}
-				return
-			}
-			if tt.wantErr {
-				t.Fatal("getStaticPod() succeeded unexpectedly")
-			}
-			// TODO: update the condition below to compare got with tt.want.
-			if true {
-				t.Errorf("getStaticPod() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func Test_addHost(t *testing.T) {
 	tests := []struct {
 		name string // description of this test case
@@ -95,7 +68,7 @@ func Test_addHost(t *testing.T) {
 		wantErr     bool
 	}{
 		{
-			name:        "the positive test",
+			name:        "add host alias to static kube-apiserver pod manifest of kind node",
 			podManifest: []byte(staticKubeAPIServerPodManifest),
 			hostname:    "test.example.com",
 			ip:          "192.168.0.1",
@@ -118,10 +91,16 @@ func Test_addHost(t *testing.T) {
 			if tt.wantErr {
 				t.Fatal("addHost() succeeded unexpectedly")
 			}
-			// TODO: update the condition below to compare got with tt.want.
-			if true {
-				t.Errorf("addHost() = %v, want %v", got, tt.want)
-			}
+			filename := filepath.Base(got)
+			assert.Equal(t, "kube-apiserver.yaml", filename)
+			pod := &v1.Pod{}
+			data, err := os.ReadFile(got)
+			require.NoError(t, err)
+			require.NoError(t, yaml.Unmarshal(data, pod))
+			hostAliases := pod.Spec.HostAliases
+			assert.Len(t, hostAliases, 1)
+			assert.Equal(t, hostAliases[0].IP, tt.ip)
+			assert.Equal(t, hostAliases[0].Hostnames[0], tt.hostname)
 		})
 	}
 }
@@ -158,10 +137,15 @@ func Test_addNameserver(t *testing.T) {
 			if tt.wantErr {
 				t.Fatal("addHost() succeeded unexpectedly")
 			}
-			// TODO: update the condition below to compare got with tt.want.
-			if true {
-				t.Errorf("addHost() = %v, want %v", got, tt.want)
-			}
+			filename := filepath.Base(got)
+			assert.Equal(t, "kube-apiserver.yaml", filename)
+			pod := &v1.Pod{}
+			data, err := os.ReadFile(got)
+			require.NoError(t, err)
+			require.NoError(t, yaml.Unmarshal(data, pod))
+			assert.Equal(t, pod.Spec.DNSPolicy, v1.DNSNone)
+			assert.Len(t, pod.Spec.DNSConfig.Nameservers, 1)
+			assert.Equal(t, pod.Spec.DNSConfig.Nameservers[0], tt.ip)
 		})
 	}
 }
@@ -293,36 +277,3 @@ spec:
     name: usr-share-ca-certificates
 status: {}
 `
-
-func TestAddHostToKubeAPIServer(t *testing.T) {
-	tests := []struct {
-		name string // description of this test case
-		// Named input parameters for target function.
-		kindContainer string
-		hostname      string
-		ip            string
-		wantErr       bool
-	}{
-		{
-			name:          "kube-apiserver update",
-			kindContainer: "onboarding.f6694d01-control-plane",
-			hostname:      "test.example.com",
-			ip:            "192.168.0.1",
-			wantErr:       false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotErr := addHostToKubeAPIServer(tt.kindContainer, tt.hostname, tt.ip)
-			if gotErr != nil {
-				if !tt.wantErr {
-					t.Errorf("AddHostToKubeAPIServer() failed: %v", gotErr)
-				}
-				return
-			}
-			if tt.wantErr {
-				t.Fatal("AddHostToKubeAPIServer() succeeded unexpectedly")
-			}
-		})
-	}
-}
