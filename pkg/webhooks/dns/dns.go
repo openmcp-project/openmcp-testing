@@ -56,8 +56,8 @@ type Setup struct {
 	// dnsZone defines the zone to pass to the coredns etcd plugin (https://coredns.io/plugins/etcd/).
 	// In a OpenControlPlane testing context this should typically match the platform service gateway base domain configuration. (default: open-control-plane.dev).
 	dnsZone string
-	// dnsUtil is used to adjust the kind api server dns settings
-	dnsUtil apiserver.DNSUtil
+	// apiServerConfig is used to adjust the kind api server dns settings
+	apiServerConfig apiserver.Configurator
 }
 
 type Option func(*Setup)
@@ -104,9 +104,9 @@ func WithPlatformServiceDNSVersion(version string) Option {
 	}
 }
 
-func WithDNSUtil(util apiserver.DNSUtil) Option {
+func WithConfigurator(c apiserver.Configurator) Option {
 	return func(s *Setup) {
-		s.dnsUtil = util
+		s.apiServerConfig = c
 	}
 }
 
@@ -126,7 +126,7 @@ func NewSetup(t *testing.T, opts ...Option) *Setup {
 		etcdVersion:               defaultEtcdVersion,
 		coreDNSChartVersion:       defaultCoreDNSChartVersion,
 		dnsZone:                   defaultDNSZone,
-		dnsUtil:                   *apiserver.NewDNSUtil(t),
+		apiServerConfig:           *apiserver.NewConfigurator(t),
 	}
 	for _, o := range opts {
 		o(cfg)
@@ -191,7 +191,7 @@ func (s *Setup) CreateExternalService() features.Func {
 		}
 		// inject additional nameserver into kube-apiserver
 		nameserverIP := getLoadBalancerIP(ctx, t, dnsClusterConfig, "coredns", "default")
-		if err := s.dnsUtil.AddNameserver(nameserverIP); err != nil {
+		if err := s.apiServerConfig.AddNameserver(nameserverIP); err != nil {
 			t.Fatalf("failed to add host to kube-apiserver: %v", err)
 		}
 		return ctx
@@ -207,7 +207,7 @@ func (s *Setup) InjectTLSRouteHostAlias(gateway, tlsRoute types.NamespacedName) 
 		// inject host into kube-apiserver
 		gwIP := getGatewayIP(ctx, t, c, gateway.Name, gateway.Namespace)
 		wbHostname := getHostname(ctx, t, c, tlsRoute.Name, tlsRoute.Namespace)
-		if err := s.dnsUtil.AddHostEntry(wbHostname, gwIP); err != nil {
+		if err := s.apiServerConfig.AddHostAlias(wbHostname, gwIP); err != nil {
 			t.Fatalf("failed to add host to kube-apiserver: %v", err)
 		}
 		return ctx
