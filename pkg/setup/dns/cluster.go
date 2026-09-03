@@ -79,8 +79,7 @@ func createCluster(ctx context.Context, config *envconf.Config, cr ClusterReques
 		if err := config.Client().Resources().Get(ctx, ar.Name, ar.Namespace, arObj); err != nil {
 			return false, err
 		}
-		// TODO verify this works as expected
-		_, found, err := unstructured.NestedFieldNoCopy(arObj.Object, "Status", "SecretRef")
+		_, found, err := unstructured.NestedFieldNoCopy(arObj.Object, "status", "secretRef")
 		return found, err
 	}); err != nil {
 		return fmt.Errorf("failed to retrieve kubeconfig of dns access request")

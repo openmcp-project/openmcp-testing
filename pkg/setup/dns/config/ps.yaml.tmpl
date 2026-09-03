@@ -1,0 +1,6 @@
+apiVersion: openmcp.cloud/v1alpha1
+kind: PlatformService
+metadata:
+  name: dns
+spec:
+  image: ghcr.io/openmcp-project/images/platform-service-dns:{{.Version}}
