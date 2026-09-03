@@ -25,7 +25,6 @@ import (
 	"github.com/openmcp-project/openmcp-testing/internal"
 	"github.com/openmcp-project/openmcp-testing/pkg/clusterutils"
 	"github.com/openmcp-project/openmcp-testing/pkg/conditions"
-	"github.com/openmcp-project/openmcp-testing/pkg/platformservices"
 	"github.com/openmcp-project/openmcp-testing/pkg/resources"
 )
 
@@ -146,9 +145,9 @@ type HostConfig struct {
 	Timeout *time.Duration
 }
 
-// InjectTLSRouteHostAliasIntoKubeAPIServer adds the retrieves the hostname of a TLSRoute and IP of a Gatway to Pod.Spec.HostAliases of a kube-apiserver.
+// InjectTLSRouteHostAlias adds the retrieves the hostname of a TLSRoute and IP of a Gatway to Pod.Spec.HostAliases of a kube-apiserver.
 // The function waits for the kubelet to restart the kube-apiserver.
-func InjectTLSRouteHostAliasIntoKubeAPIServer(config HostConfig) features.Func {
+func InjectTLSRouteHostAlias(config HostConfig) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		runtime.Must(gatewayv1.Install(c.Client().Resources().GetScheme()))
 		runtime.Must(gatewayv1alpha2.Install(c.Client().Resources().GetScheme()))
@@ -212,16 +211,13 @@ type platformServiceDNSConfig struct {
 func createPlatformServiceDNS(ctx context.Context, t *testing.T, config *envconf.Config, dnsConfig platformServiceDNSConfig) error {
 	t.Helper()
 	klog.Info("create platform service dns...")
-	err := platformservices.InstallPlatformService(ctx, config, platformservices.PlatformServiceSetup{
-		Name:  "dns",
-		Image: fmt.Sprintf("ghcr.io/openmcp-project/images/platform-service-dns:%s", dnsConfig.Version),
-	})
-	if err != nil {
+	psDNSTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/ps.yaml.tmpl")
+	if _, err := resources.CreateObjectsFromTemplateFile(ctx, config, psDNSTemplate, dnsConfig); err != nil {
 		return err
 	}
 	klog.Infof("create external-dns config for provider coredns backed by etcd (%s)", dnsConfig.EtcdIP)
 	// Import platform service configs with retry logic since discovery api might take some time to pick the new ps-dns config type
-	err = wait.For(func(ctx context.Context) (done bool, err error) {
+	err := wait.For(func(ctx context.Context) (done bool, err error) {
 		psDNSConfigTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/psconfig.yaml.tmpl")
 		if _, err = resources.CreateObjectsFromTemplateFile(ctx, config, psDNSConfigTemplate, dnsConfig); err != nil {
 			klog.Infof("failed to import platform service dns config, will retry: %v", err)
