@@ -1,20 +1,20 @@
 # DNS
 
-The `setup/dns` package provides utility functions that are primarialy intended to help testing webhooks in [OpenControlPlane](https://open-control-plane.io/).
+Package `webhooks/dns` provides utility functions that help testing webhooks in [OpenControlPlane](https://open-control-plane.io/).
 
 ## Usage
 
 ### Single TLSRoute Hostname Resolution 
 
-For simple test scenarios where a single hostname of a TLSRoute in cluster `A` needs to resolved by a Kubernetes API server in cluster `B`, use:
+For simple test scenarios where a single hostname of a TLSRoute in cluster `A` needs to be resolved by a Kubernetes API server in cluster `B`, use:
 
 ```go
 // in your e2e FeatureBuilder
 ...
-Setup(dns.InjectTLSRouteHostAliasIntoKubeAPIServer(dns.HostConfig{
+Setup(dns.NewSetup(t).InjectTLSRouteAlias(
 	GatewayKey:  types.NamespacedName{Namespace: "openmcp-system", Name: "default"},
 	TLSRouteKey: types.NamespacedName{Namespace: "openmcp-system", Name: "foo-webhook"},
-})).
+)).
 ...
 ```
 
@@ -27,12 +27,7 @@ For complex test scenarios that involve service discovery from multiple sources 
 ```go
 // in your e2e FeatureBuilder
 ...
-Setup(dns.CreateExternalService(dns.ClusterConfig{
-    ExternalDNSChartVersion:   "v0.21.0",
-	PlatformServiceDNSVersion: "v0.1.0",
-	EtcdVersion:               "v3.5.15",
-	CoreChartDNSVersion:       "1.47.0",
-})).
+Setup(dns.NewSetup(t).CreateExternalService()).
 ...
 ```
 
