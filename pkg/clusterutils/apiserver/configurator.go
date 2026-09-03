@@ -17,18 +17,18 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-type DNSUtil struct {
+type Configurator struct {
 	dockerAlias          string
 	kindContainer        string
 	apiServerPodManifest string
 	timeout              time.Duration
 }
 
-type Option func(*DNSUtil)
+type Option func(*Configurator)
 
-// NewDNSUtil returns a helper to adjust the static pod manifest of the kube-apiserver in a kind control plane container
-func NewDNSUtil(t *testing.T, opts ...Option) *DNSUtil {
-	cmd := &DNSUtil{
+// NewConfigurator returns a helper to adjust the static pod manifest of the kube-apiserver in a kind control plane container
+func NewConfigurator(t *testing.T, opts ...Option) *Configurator {
+	cmd := &Configurator{
 		dockerAlias:          "docker",
 		apiServerPodManifest: "/etc/kubernetes/manifests/kube-apiserver.yaml",
 		timeout:              time.Minute * 3,
@@ -48,23 +48,23 @@ func NewDNSUtil(t *testing.T, opts ...Option) *DNSUtil {
 
 // WithDockerAlias allows to replace `docker` cli calls with e.g. `podman`
 func WithDockerAlias(alias string) Option {
-	return func(cu *DNSUtil) {
-		cu.dockerAlias = alias
+	return func(c *Configurator) {
+		c.dockerAlias = alias
 	}
 }
 
 // WithTimeout overwrites the default wait timeout
 func WithTimeout(timeout time.Duration) Option {
-	return func(cu *DNSUtil) {
-		cu.timeout = timeout
+	return func(c *Configurator) {
+		c.timeout = timeout
 	}
 }
 
 // addHostToKubeAPIServer adds the given hostname -> ip to the host aliases of the kube-apiserver static pod
 // running inside the given kind container, then writes the updated manifest back so kubelet restarts the pod.
-func (cu *DNSUtil) AddHostEntry(hostname, ip string) error {
-	klog.Infof("add host %s with ip %s to /etc/hosts of the (%s) kube-apiserver", hostname, ip, cu.kindContainer)
-	raw, err := cu.getStaticPod()
+func (c *Configurator) AddHostAlias(hostname, ip string) error {
+	klog.Infof("add host %s with ip %s to /etc/hosts of the (%s) kube-apiserver", hostname, ip, c.kindContainer)
+	raw, err := c.getStaticPod()
 	if err != nil {
 		return err
 	}
@@ -72,10 +72,10 @@ func (cu *DNSUtil) AddHostEntry(hostname, ip string) error {
 	if err != nil {
 		return err
 	}
-	if err := cu.copyTmpFileToContainer(tmpFile); err != nil {
+	if err := c.copyTmpFileToContainer(tmpFile); err != nil {
 		return err
 	}
-	if err := cu.waitForKubeAPIServerRestart(); err != nil {
+	if err := c.waitForKubeAPIServerRestart(); err != nil {
 		return fmt.Errorf("kube-apiserver didn't restart properly: %v", err)
 	}
 	return nil
@@ -83,9 +83,9 @@ func (cu *DNSUtil) AddHostEntry(hostname, ip string) error {
 
 // AddHostToKubeAPIServer adds the nameserver ip to dns config of the kube-apiserver static pod
 // running inside the given kind container, then writes the updated manifest back so kubelet restarts the pod.
-func (cu *DNSUtil) AddNameserver(ip string) error {
-	klog.Infof("add nameserver with ip %s (coredns) to dns config of (%s) kube-apiserver", ip, cu.kindContainer)
-	raw, err := cu.getStaticPod()
+func (c *Configurator) AddNameserver(ip string) error {
+	klog.Infof("add nameserver with ip %s (coredns) to dns config of (%s) kube-apiserver", ip, c.kindContainer)
+	raw, err := c.getStaticPod()
 	if err != nil {
 		return err
 	}
@@ -93,21 +93,21 @@ func (cu *DNSUtil) AddNameserver(ip string) error {
 	if err != nil {
 		return err
 	}
-	if err := cu.copyTmpFileToContainer(tmpFile); err != nil {
+	if err := c.copyTmpFileToContainer(tmpFile); err != nil {
 		return err
 	}
-	if err := cu.waitForKubeAPIServerRestart(); err != nil {
+	if err := c.waitForKubeAPIServerRestart(); err != nil {
 		return fmt.Errorf("kube-apiserver didn't restart properly: %v", err)
 	}
 	return nil
 }
 
-func (cu *DNSUtil) copyTmpFileToContainer(tmpFile string) error {
+func (c *Configurator) copyTmpFileToContainer(tmpFile string) error {
 	var stderr bytes.Buffer
-	cmd := exec.Command(cu.dockerAlias, "cp", tmpFile, cu.kindContainer+":"+cu.apiServerPodManifest)
+	cmd := exec.Command(c.dockerAlias, "cp", tmpFile, c.kindContainer+":"+c.apiServerPodManifest)
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to copy updated manifest to %s: %w: %s", cu.kindContainer, err, stderr.String())
+		return fmt.Errorf("failed to copy updated manifest to %s: %w: %s", c.kindContainer, err, stderr.String())
 	}
 	return nil
 }
@@ -138,13 +138,13 @@ func addNameserver(podManifest []byte, ip string) (string, error) {
 // retrieve kube-apiserver.yaml from kind node fs
 // file defaults to /etc/kubernetes/manifests/kube-apiserver.yaml
 // returns the cat file output to pass to addHost
-func (cu *DNSUtil) getStaticPod() (string, error) {
+func (c *Configurator) getStaticPod() (string, error) {
 	var stdout, stderr bytes.Buffer
-	cmd := exec.Command(cu.dockerAlias, "exec", cu.kindContainer, "cat", cu.apiServerPodManifest)
+	cmd := exec.Command(c.dockerAlias, "exec", c.kindContainer, "cat", c.apiServerPodManifest)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("failed to read %s from %s: %w: %s", cu.apiServerPodManifest, cu.kindContainer, err, stderr.String())
+		return "", fmt.Errorf("failed to read %s from %s: %w: %s", c.apiServerPodManifest, c.kindContainer, err, stderr.String())
 	}
 	return stdout.String(), nil
 }
@@ -179,37 +179,35 @@ func addHostAlias(pod *corev1.Pod, hostName, ip string) {
 // waitForKubeAPIServerRestart polls the kube-apiserver /livez endpoint inside the kind
 // container via docker exec. It first waits for the server to go down (confirming kubelet
 // has torn down the old pod), then waits for it to come back healthy.
-func (cu *DNSUtil) waitForKubeAPIServerRestart() error {
-	deadline := time.Now().Add(cu.timeout)
-	klog.Infof("wait for (%s) kube-apiserver restart...", cu.kindContainer)
-
+func (c *Configurator) waitForKubeAPIServerRestart() error {
+	deadline := time.Now().Add(c.timeout)
+	klog.Infof("wait for (%s) kube-apiserver restart...", c.kindContainer)
 	// wait for the server to become unavailable
 	for time.Now().Before(deadline) {
-		if err := cu.curlAPIServer().Run(); err != nil {
-			klog.Infof("(%s) kube-apiserver unavailable", cu.kindContainer)
+		if !c.apiServerAvailable() {
+			klog.Infof("(%s) kube-apiserver unavailable", c.kindContainer)
 			break
 		}
-		klog.Infof("wait for (%s) kube-apiserver to become unavailable...", cu.kindContainer)
+		klog.Infof("wait for (%s) kube-apiserver to become unavailable...", c.kindContainer)
 		time.Sleep(2 * time.Second)
 	}
 	if !time.Now().Before(deadline) {
-		return fmt.Errorf("kube-apiserver in %s did not go down within %s", cu.kindContainer, cu.timeout)
+		return fmt.Errorf("kube-apiserver in %s did not go down within %s", c.kindContainer, c.timeout)
 	}
-
 	// wait for the server to become healthy again
 	for time.Now().Before(deadline) {
-		if err := cu.curlAPIServer().Run(); err == nil {
-			klog.Infof("(%s) kube-apiserver available", cu.kindContainer)
+		if c.apiServerAvailable() {
+			klog.Infof("(%s) kube-apiserver available", c.kindContainer)
 			return nil
 		}
-		klog.Infof("wait for (%s) kube-apiserver to become available...", cu.kindContainer)
+		klog.Infof("wait for (%s) kube-apiserver to become available...", c.kindContainer)
 		time.Sleep(2 * time.Second)
 	}
-	return fmt.Errorf("kube-apiserver in %s did not become healthy within %s", cu.kindContainer, cu.timeout)
+	return fmt.Errorf("kube-apiserver in %s did not become healthy within %s", c.kindContainer, c.timeout)
 }
 
-func (cu *DNSUtil) curlAPIServer() *exec.Cmd {
-	return exec.Command(cu.dockerAlias, "exec", cu.kindContainer, "curl", "--silent", "--fail", "--insecure", "https://localhost:6443/livez")
+func (c *Configurator) apiServerAvailable() bool {
+	return exec.Command(c.dockerAlias, "exec", c.kindContainer, "curl", "--silent", "--fail", "--insecure", "https://localhost:6443/livez").Run() == nil
 }
 
 func onboardingClusterContainer() (string, error) {
