@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	"github.com/openmcp-project/openmcp-testing/pkg/platformservices"
 	"github.com/openmcp-project/openmcp-testing/pkg/providers"
 	"github.com/openmcp-project/openmcp-testing/pkg/setup"
@@ -26,6 +27,13 @@ func TestMain(m *testing.M) {
 			Image:        "ghcr.io/openmcp-project/images/openmcp-operator:v1.3.0",
 			Environment:  "debug",
 			PlatformName: "platform",
+			ExtraClusterPurposeMapping: []providers.ClusterPurposeMapping{
+				{
+					Purpose: "dns",
+					Profile: "kind",
+					Tenancy: v1alpha1.TENANCY_SHARED,
+				},
+			},
 		},
 		ClusterProviders: []providers.ClusterProviderSetup{
 			{
