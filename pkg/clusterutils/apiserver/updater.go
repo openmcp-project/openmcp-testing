@@ -17,10 +17,14 @@ import (
 
 // Updater is a helper to adjust the static pod manifest of the kube-apiserver in a kind control plane container.
 type Updater struct {
-	dockerAlias          string
-	kindContainer        string
+	// The CLI to interact with the kind container. Defaults to docker, can be replaced with docker compatible CLIs like podman.
+	dockerCLI string
+	// The kind control plane to update. Defaults to the onboarcing cluster container.
+	kindContainer string
+	// The path to the api-server manifest in the kind container.
 	apiServerPodManifest string
-	timeout              time.Duration
+	// The timeout for the API server restart.
+	timeout time.Duration
 }
 
 type Option func(*Updater)
@@ -28,7 +32,7 @@ type Option func(*Updater)
 // NewUpdater returns a new Updater. The onboarding cluster container is the default cluster target.
 func NewUpdater(opts ...Option) (*Updater, error) {
 	updater := &Updater{
-		dockerAlias:          "docker",
+		dockerCLI:            "docker",
 		apiServerPodManifest: "/etc/kubernetes/manifests/kube-apiserver.yaml",
 		timeout:              time.Minute * 3,
 	}
@@ -45,9 +49,9 @@ func NewUpdater(opts ...Option) (*Updater, error) {
 	return updater, nil
 }
 
-func WithDockerAlias(alias string) Option {
+func WithDockerCLI(cli string) Option {
 	return func(c *Updater) {
-		c.dockerAlias = alias
+		c.dockerCLI = cli
 	}
 }
 
@@ -126,7 +130,7 @@ func (u *Updater) writeToContainerFS(pod *corev1.Pod) error {
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
 	var stderr bytes.Buffer
-	cmd := exec.Command(u.dockerAlias, "cp", tmpFile.Name(), u.kindContainer+":"+u.apiServerPodManifest)
+	cmd := exec.Command(u.dockerCLI, "cp", tmpFile.Name(), u.kindContainer+":"+u.apiServerPodManifest)
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to copy updated manifest to %s: %w: %s", u.kindContainer, err, stderr.String())
@@ -137,7 +141,7 @@ func (u *Updater) writeToContainerFS(pod *corev1.Pod) error {
 // retrieve the kube-apiserver manifest from the kind container filesystem.
 func (u *Updater) getStaticPod() (*corev1.Pod, error) {
 	var stdout, stderr bytes.Buffer
-	cmd := exec.Command(u.dockerAlias, "exec", u.kindContainer, "cat", u.apiServerPodManifest)
+	cmd := exec.Command(u.dockerCLI, "exec", u.kindContainer, "cat", u.apiServerPodManifest)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -181,7 +185,7 @@ func (u *Updater) waitForRestart() error {
 }
 
 func (u *Updater) apiServerAvailable() bool {
-	return exec.Command(u.dockerAlias, "exec", u.kindContainer, "curl", "--silent", "--fail", "--insecure", "https://localhost:6443/livez").Run() == nil
+	return exec.Command(u.dockerCLI, "exec", u.kindContainer, "curl", "--silent", "--fail", "--insecure", "https://localhost:6443/livez").Run() == nil
 }
 
 func onboardingClusterContainer() (string, error) {
