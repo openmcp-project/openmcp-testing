@@ -22,7 +22,7 @@ type Updater struct {
 	// The kind control plane to update. Defaults to the onboarcing cluster container.
 	kindContainer string
 	// The path to the api-server manifest in the kind container.
-	apiServerPodManifest string
+	apiServerManifestPath string
 	// The timeout for the API server restart.
 	timeout time.Duration
 }
@@ -32,9 +32,9 @@ type Option func(*Updater)
 // NewUpdater returns a new Updater. The onboarding cluster container is the default cluster target.
 func NewUpdater(opts ...Option) (*Updater, error) {
 	updater := &Updater{
-		dockerCLI:            "docker",
-		apiServerPodManifest: "/etc/kubernetes/manifests/kube-apiserver.yaml",
-		timeout:              time.Minute * 3,
+		dockerCLI:             "docker",
+		apiServerManifestPath: "/etc/kubernetes/manifests/kube-apiserver.yaml",
+		timeout:               time.Minute * 3,
 	}
 	for _, o := range opts {
 		o(updater)
@@ -47,6 +47,12 @@ func NewUpdater(opts ...Option) (*Updater, error) {
 		updater.kindContainer = onboardingClusterContainer
 	}
 	return updater, nil
+}
+
+func WithAPIServerManifestPath(path string) Option {
+	return func(c *Updater) {
+		c.apiServerManifestPath = path
+	}
 }
 
 func WithDockerCLI(cli string) Option {
@@ -130,7 +136,7 @@ func (u *Updater) writeToContainerFS(pod *corev1.Pod) error {
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
 	var stderr bytes.Buffer
-	cmd := exec.Command(u.dockerCLI, "cp", tmpFile.Name(), u.kindContainer+":"+u.apiServerPodManifest)
+	cmd := exec.Command(u.dockerCLI, "cp", tmpFile.Name(), u.kindContainer+":"+u.apiServerManifestPath)
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to copy updated manifest to %s: %w: %s", u.kindContainer, err, stderr.String())
@@ -141,11 +147,11 @@ func (u *Updater) writeToContainerFS(pod *corev1.Pod) error {
 // retrieve the kube-apiserver manifest from the kind container filesystem.
 func (u *Updater) getStaticPod() (*corev1.Pod, error) {
 	var stdout, stderr bytes.Buffer
-	cmd := exec.Command(u.dockerCLI, "exec", u.kindContainer, "cat", u.apiServerPodManifest)
+	cmd := exec.Command(u.dockerCLI, "exec", u.kindContainer, "cat", u.apiServerManifestPath)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("failed to read %s from %s: %w: %s", u.apiServerPodManifest, u.kindContainer, err, stderr.String())
+		return nil, fmt.Errorf("failed to read %s from %s: %w: %s", u.apiServerManifestPath, u.kindContainer, err, stderr.String())
 	}
 	podManifest := stdout.String()
 	pod := &corev1.Pod{}
