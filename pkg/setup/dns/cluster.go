@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 
@@ -53,15 +54,16 @@ type accessRequest struct {
 }
 
 func createCluster(ctx context.Context, config *envconf.Config, cr ClusterRequest) error {
+	klog.Info("create dns cluster")
 	crObj, err := resources.CreateObjectFromTemplate(ctx, config, clusterRequestTemplate, cr)
 	if err != nil {
-		return fmt.Errorf("failed to create cluster request: %v", err)
+		return fmt.Errorf("failed to create dns cluster request: %w", err)
 	}
 	if err := wait.For(openmcpconditions.Status(crObj, config, "phase", "Granted")); err != nil {
-		return fmt.Errorf("cluster request failed to get ready: %v", err)
+		return fmt.Errorf("dns cluster request failed to get ready: %w", err)
 	}
 	if err := providers.ClustersReady(ctx, config); err != nil {
-		return fmt.Errorf("MCP cluster failed to get ready: %v", err)
+		return fmt.Errorf("dns cluster failed to get ready: %w", err)
 	}
 	ar := accessRequest{
 		Name:        cr.Name,
@@ -70,10 +72,10 @@ func createCluster(ctx context.Context, config *envconf.Config, cr ClusterReques
 	}
 	arObj, err := resources.CreateObjectFromTemplate(ctx, config, accessRequestTemplate, ar)
 	if err != nil {
-		return fmt.Errorf("failed to create access request: %v", err)
+		return fmt.Errorf("failed to request dns cluster access: %w", err)
 	}
 	if err := wait.For(openmcpconditions.Status(arObj, config, "phase", "Granted")); err != nil {
-		return fmt.Errorf("access request failed to get ready: %v", err)
+		return fmt.Errorf("dns cluster access not granted: %w", err)
 	}
 	if err := wait.For(func(ctx context.Context) (bool, error) {
 		if err := config.Client().Resources().Get(ctx, ar.Name, ar.Namespace, arObj); err != nil {
@@ -82,7 +84,7 @@ func createCluster(ctx context.Context, config *envconf.Config, cr ClusterReques
 		_, found, err := unstructured.NestedFieldNoCopy(arObj.Object, "status", "secretRef")
 		return found, err
 	}); err != nil {
-		return fmt.Errorf("failed to retrieve kubeconfig of dns access request")
+		return fmt.Errorf("failed to retrieve kubeconfig to access dns cluster")
 	}
 	return nil
 }

@@ -38,12 +38,13 @@ const (
 //go:embed config/*
 var configFS embed.FS
 
+// Deployer creates an external DNS service to use with platform-service-dns.
 type Deployer struct {
-	// clusterName defines the name of the cluster that will be created (default: dns).
+	// clusterName defines the name of the cluster that will be created.
 	clusterName string
-	// namespace defines the namespace where the core components like the openmcp-operator is deployed (default: openmcp-system).
+	// namespace defines the namespace where the core components like the openmcp-operator is deployed.
 	namespace string
-	// clusterPurpose defines the purpose that will be used to create the cluster for the dedicated dns deployment (default: dns).
+	// clusterPurpose defines the purpose that will be used to create the cluster for the dedicated dns deployment.
 	clusterPurpose string
 	// externalDNSChartVersion defines the chart version of external-dns to use with platform-servce-dns.
 	externalDNSChartVersion string
@@ -54,9 +55,9 @@ type Deployer struct {
 	// coreDNSChartVersion defines the the coreDNS Helm chart version to use to deploy the dedicated DNS service.
 	coreDNSChartVersion string
 	// dnsZone defines the zone to pass to the coredns etcd plugin (https://coredns.io/plugins/etcd/).
-	// In a OpenControlPlane testing context this should typically match the platform service gateway base domain configuration. (default: open-control-plane.dev).
+	// In a OpenControlPlane testing context this should typically match the platform service gateway base domain configuration.
 	dnsZone string
-	// apiServerUpdater is used to adjust the kind api server dns settings
+	// apiServerUpdater is used to add the deployed dns service as nameserver to a kind control plane API server
 	apiServerUpdater *apiserver.Updater
 }
 
@@ -117,7 +118,7 @@ func WithDNSZone(zone string) Option {
 }
 
 func NewDeployer(opts ...Option) (*Deployer, error) {
-	setup := &Deployer{
+	deployer := &Deployer{
 		clusterName:               defaultDNSClusterName,
 		namespace:                 defaultNamespace,
 		clusterPurpose:            defaultDNSClusterPurpose,
@@ -128,19 +129,19 @@ func NewDeployer(opts ...Option) (*Deployer, error) {
 		dnsZone:                   defaultDNSZone,
 	}
 	for _, o := range opts {
-		o(setup)
+		o(deployer)
 	}
-	if setup.apiServerUpdater == nil {
+	if deployer.apiServerUpdater == nil {
 		var err error
-		setup.apiServerUpdater, err = apiserver.NewUpdater()
+		deployer.apiServerUpdater, err = apiserver.NewUpdater()
 		if err != nil {
-			return nil, fmt.Errorf("failed to init api-server updater: %v", err)
+			return nil, fmt.Errorf("failed to init api-server updater: %w", err)
 		}
 	}
-	return setup, nil
+	return deployer, nil
 }
 
-// CreateExternalService creates a dedicated DNS cluster and sets up platform-cluster-dns to use it as external-dns target.
+// CreateExternalService creates a dedicated DNS cluster + service to use with platform-cluster-dns.
 // If the deployment fails, the calling test is stopped and marked as failed.
 func CreateExternalService(opts ...Option) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
@@ -158,6 +159,7 @@ func CreateExternalService(opts ...Option) features.Func {
 
 // Deploy deploys CoreDNS + etcd to a dedicated "dns" cluster together with platform service DNS to resemble a production like external DNS service.
 func (d *Deployer) Deploy(ctx context.Context, c *envconf.Config) error {
+	klog.Info("deploy dns service...")
 	runtime.Must(gatewayv1.Install(c.Client().Resources().GetScheme()))
 	runtime.Must(gatewayv1alpha2.Install(c.Client().Resources().GetScheme()))
 	// create dns cluster
@@ -166,11 +168,11 @@ func (d *Deployer) Deploy(ctx context.Context, c *envconf.Config) error {
 		Namespace: d.namespace,
 		Purpose:   d.clusterPurpose,
 	}); err != nil {
-		return fmt.Errorf("failed to create dns cluster: %v", err)
+		return fmt.Errorf("failed to create dns cluster: %w", err)
 	}
 	dnsClusterConfig, err := clusterutils.ConfigByPrefix(d.clusterName, "default")
 	if err != nil {
-		return fmt.Errorf("failed to retrieve dns cluster config: %v", err)
+		return fmt.Errorf("failed to retrieve dns cluster config: %w", err)
 	}
 	// deploy etcd and coredns to dns cluster
 	etcdTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/etcd.yaml.tmpl")
@@ -180,7 +182,7 @@ func (d *Deployer) Deploy(ctx context.Context, c *envconf.Config) error {
 		EtcdVersion: d.etcdVersion,
 	}
 	if _, err := resources.CreateObjectsFromTemplateFile(ctx, dnsClusterConfig, etcdTemplate, etcdData); err != nil {
-		return fmt.Errorf("failed to deploy etcd for dns: %v", err)
+		return fmt.Errorf("failed to deploy etcd for dns: %w", err)
 	}
 	klog.Info("successfully deployed etcd to dns cluster")
 	coreDNSTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/coredns.yaml.tmpl")
@@ -196,26 +198,27 @@ func (d *Deployer) Deploy(ctx context.Context, c *envconf.Config) error {
 		DNSZone:             d.dnsZone,
 	}
 	if _, err := resources.CreateObjectsFromTemplateFile(ctx, c, coreDNSTemplate, coreDNSData); err != nil {
-		return fmt.Errorf("failed to deploy coredns: %v", err)
+		return fmt.Errorf("failed to deploy coredns: %w", err)
 	}
 	klog.Info("successfully deployed coredns to dns cluster")
 	// install platform-service-dns and configure external-dns to use the dedicated dns cluster etcd
 	etcdIP, err := getLoadBalancerIP(ctx, dnsClusterConfig, "etcd-external", "default")
 	if err != nil {
-		return fmt.Errorf("failed to retrieve etcd IP: %v", err)
+		return fmt.Errorf("failed to retrieve etcd IP: %w", err)
 	}
 
 	if err := d.createPlatformServiceDNS(ctx, c, etcdIP); err != nil {
-		return fmt.Errorf("failed to create platform service dns config: %v", err)
+		return fmt.Errorf("failed to create platform service dns config: %w", err)
 	}
 	// inject additional nameserver into kube-apiserver
 	nameserverIP, err := getLoadBalancerIP(ctx, dnsClusterConfig, "coredns", "default")
 	if err != nil {
-		return fmt.Errorf("failed to retrieve core dns IP: %v", err)
+		return fmt.Errorf("failed to retrieve core dns IP: %w", err)
 	}
 	if err := d.apiServerUpdater.AddNameserver(nameserverIP); err != nil {
-		return fmt.Errorf("failed to add host to kube-apiserver: %v", err)
+		return fmt.Errorf("failed to add host to kube-apiserver: %w", err)
 	}
+	klog.Info("dns service is ready")
 	return nil
 }
 
@@ -248,7 +251,7 @@ func (d *Deployer) createPlatformServiceDNS(ctx context.Context, config *envconf
 			// Return false to retry, but don't return error to allow retries
 			return false, nil
 		}
-		klog.Info("successfully imported platform service dns")
+		klog.Info("successfully created platform service dns config")
 		return true, nil
 	})
 	if err != nil {
@@ -275,7 +278,7 @@ func getLoadBalancerIP(ctx context.Context, config *envconf.Config, name, namesp
 	service.SetName(name)
 	service.SetNamespace(namespace)
 	if err := config.Client().Resources().Get(ctx, name, namespace, service); err != nil {
-		return "", fmt.Errorf("failed to get Service '%s/%s': %v", namespace, name, err)
+		return "", fmt.Errorf("failed to get Service '%s/%s': %w", namespace, name, err)
 	}
 	for _, ingress := range service.Status.LoadBalancer.Ingress {
 		if ingress.IP != "" {
