@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,6 +15,7 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+// Updater is a helper to adjust the static pod manifest of the kube-apiserver in a kind control plane container.
 type Updater struct {
 	dockerAlias          string
 	kindContainer        string
@@ -25,21 +25,20 @@ type Updater struct {
 
 type Option func(*Updater)
 
-// NewUpdater returns a helper to adjust the static pod manifest of the kube-apiserver in a kind control plane container.
-// Targets the onboarding cluster container if no kind target container has been provided and the onboarding default
+// NewUpdater returns a new Updater. The onboarding cluster container is the default cluster target.
 func NewUpdater(opts ...Option) (*Updater, error) {
 	updater := &Updater{
 		dockerAlias:          "docker",
 		apiServerPodManifest: "/etc/kubernetes/manifests/kube-apiserver.yaml",
 		timeout:              time.Minute * 3,
 	}
-	for _, option := range opts {
-		option(updater)
+	for _, o := range opts {
+		o(updater)
 	}
 	if updater.kindContainer == "" {
 		onboardingClusterContainer, err := onboardingClusterContainer()
 		if err != nil {
-			return nil, fmt.Errorf("failed to determine onboarding container name: %v", err)
+			return nil, err
 		}
 		updater.kindContainer = onboardingClusterContainer
 	}
@@ -64,63 +63,36 @@ func WithTimeout(timeout time.Duration) Option {
 	}
 }
 
-// addHostToKubeAPIServer adds the given hostname -> ip to the host aliases of the kube-apiserver static pod
-// running inside the given kind container, then writes the updated manifest back so kubelet restarts the pod.
+// AddHostAlias adds the given hostname -> ip mapping as host alias to the kube-apiserver (static pod) manifest
+// inside a kind container and waits for the kubelet to restart the API server.
 func (u *Updater) AddHostAlias(hostname, ip string) error {
 	klog.Infof("add host %s with ip %s to /etc/hosts of the (%s) kube-apiserver", hostname, ip, u.kindContainer)
-	raw, err := u.getStaticPod()
+	pod, err := u.getStaticPod()
 	if err != nil {
 		return err
 	}
-	tmpFile, err := addHost([]byte(raw), hostname, ip)
-	if err != nil {
-		return err
-	}
-	if err := u.copyTmpFileToContainer(tmpFile); err != nil {
+	pod.Spec.HostAliases = append(pod.Spec.HostAliases, corev1.HostAlias{
+		IP: ip,
+		Hostnames: []string{
+			hostname,
+		},
+	})
+	if err := u.writeToContainerFS(pod); err != nil {
 		return err
 	}
 	if err := u.waitForRestart(); err != nil {
-		return fmt.Errorf("kube-apiserver didn't restart properly: %v", err)
+		return err
 	}
 	return nil
 }
 
-// AddHostToKubeAPIServer adds the nameserver ip to dns config of the kube-apiserver static pod
-// running inside the given kind container, then writes the updated manifest back so kubelet restarts the pod.
+// AddNameserver adds the nameserver ip to the DNS config of the kube-apiserver (static pod) manifest
+// inside a kind container and waits for the kubelet to restart the API server.
 func (u *Updater) AddNameserver(ip string) error {
 	klog.Infof("add nameserver with ip %s (coredns) to dns config of (%s) kube-apiserver", ip, u.kindContainer)
-	raw, err := u.getStaticPod()
+	pod, err := u.getStaticPod()
 	if err != nil {
 		return err
-	}
-	tmpFile, err := addNameserver([]byte(raw), ip)
-	if err != nil {
-		return err
-	}
-	if err := u.copyTmpFileToContainer(tmpFile); err != nil {
-		return err
-	}
-	if err := u.waitForRestart(); err != nil {
-		return fmt.Errorf("kube-apiserver didn't restart properly: %v", err)
-	}
-	return nil
-}
-
-func (u *Updater) copyTmpFileToContainer(tmpFile string) error {
-	var stderr bytes.Buffer
-	cmd := exec.Command(u.dockerAlias, "cp", tmpFile, u.kindContainer+":"+u.apiServerPodManifest)
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to copy updated manifest to %s: %w: %s", u.kindContainer, err, stderr.String())
-	}
-	return nil
-}
-
-// addNameserver adds the given IP to the list of nameserver of the pod dns config and writes the result to a temporary file
-func addNameserver(podManifest []byte, ip string) (string, error) {
-	pod := &corev1.Pod{}
-	if err := yaml.Unmarshal(podManifest, pod); err != nil {
-		return "", fmt.Errorf("failed to unmarshal pod manifest: %w", err)
 	}
 	pod.Spec.DNSPolicy = corev1.DNSNone
 	pod.Spec.DNSConfig = &corev1.PodDNSConfig{
@@ -128,58 +100,59 @@ func addNameserver(podManifest []byte, ip string) (string, error) {
 			ip,
 		},
 	}
+	if err := u.writeToContainerFS(pod); err != nil {
+		return err
+	}
+	if err := u.waitForRestart(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (u *Updater) writeToContainerFS(pod *corev1.Pod) error {
+	tmpFile, err := os.CreateTemp("", "kube-apiserver.yaml")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer func() {
+		tmpFile.Close()
+		os.Remove(tmpFile.Name())
+	}()
 	data, err := yaml.Marshal(pod)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal pod to yaml: %w", err)
+		return fmt.Errorf("failed to marshal pod to yaml: %w", err)
 	}
-	tmpFile := filepath.Join(os.TempDir(), "kube-apiserver.yaml")
-	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
-		return "", fmt.Errorf("failed to write temp file: %w", err)
+	if _, err := tmpFile.Write(data); err != nil {
+		return fmt.Errorf("failed to write temp file: %w", err)
 	}
-	return tmpFile, nil
+	var stderr bytes.Buffer
+	cmd := exec.Command(u.dockerAlias, "cp", tmpFile.Name(), u.kindContainer+":"+u.apiServerPodManifest)
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to copy updated manifest to %s: %w: %s", u.kindContainer, err, stderr.String())
+	}
+	return nil
 }
 
 // retrieve the kube-apiserver manifest from the kind container filesystem.
-func (u *Updater) getStaticPod() (string, error) {
+func (u *Updater) getStaticPod() (*corev1.Pod, error) {
 	var stdout, stderr bytes.Buffer
 	cmd := exec.Command(u.dockerAlias, "exec", u.kindContainer, "cat", u.apiServerPodManifest)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("failed to read %s from %s: %w: %s", u.apiServerPodManifest, u.kindContainer, err, stderr.String())
+		return nil, fmt.Errorf("failed to read %s from %s: %w: %s", u.apiServerPodManifest, u.kindContainer, err, stderr.String())
 	}
-	return stdout.String(), nil
-}
-
-// addHost adds the given hostName and IP to the list of host aliases and writes the result to a temporary file
-func addHost(podManifest []byte, hostname, ip string) (string, error) {
+	podManifest := stdout.String()
 	pod := &corev1.Pod{}
-	if err := yaml.Unmarshal(podManifest, pod); err != nil {
-		return "", fmt.Errorf("failed to unmarshal pod manifest: %w", err)
+	if err := yaml.Unmarshal([]byte(podManifest), pod); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal pod manifest: %w", err)
 	}
-	addHostAlias(pod, hostname, ip)
-	data, err := yaml.Marshal(pod)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal pod to yaml: %w", err)
-	}
-	tmpFile := filepath.Join(os.TempDir(), "kube-apiserver.yaml")
-	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
-		return "", fmt.Errorf("failed to write temp file: %w", err)
-	}
-	return tmpFile, nil
-}
-
-func addHostAlias(pod *corev1.Pod, hostName, ip string) {
-	pod.Spec.HostAliases = append(pod.Spec.HostAliases, corev1.HostAlias{
-		IP: ip,
-		Hostnames: []string{
-			hostName,
-		},
-	})
+	return pod, nil
 }
 
 // waitForRestart polls the kube-apiserver /livez endpoint inside the kind container.
-// It first waits for the server to go down, then waits for it to come back healthy.
+// It waits for the API server to go down and come back healthy.
 func (u *Updater) waitForRestart() error {
 	timeout := time.Now().Add(u.timeout)
 	klog.Infof("wait for (%s) kube-apiserver restart...", u.kindContainer)
