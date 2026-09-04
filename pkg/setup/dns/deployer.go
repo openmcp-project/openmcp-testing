@@ -9,13 +9,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/features"
-	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
-	gatewayv1alpha2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 
 	"github.com/openmcp-project/openmcp-testing/internal"
 	"github.com/openmcp-project/openmcp-testing/pkg/clusterutils"
@@ -29,7 +26,7 @@ const (
 	defaultDNSClusterName            = "dns"
 	defaultDNSClusterPurpose         = "dns"
 	defaultDNSZone                   = "open-control-plane.dev"
-	defaultEtcdVersion               = "v3.5.15"
+	defaultEtcdVersion               = "v3.7.1"
 	defaultExternalDNSChartVersion   = "v0.21.0"
 	defaultNamespace                 = "openmcp-system"
 	defaultPlatformServiceDNSVersion = "v0.1.0"
@@ -160,10 +157,8 @@ func CreateExternalService(opts ...Option) features.Func {
 // Deploy deploys CoreDNS + etcd to a dedicated "dns" cluster together with platform service DNS to resemble a production like external DNS service.
 func (d *Deployer) Deploy(ctx context.Context, c *envconf.Config) error {
 	klog.Info("deploy dns service...")
-	runtime.Must(gatewayv1.Install(c.Client().Resources().GetScheme()))
-	runtime.Must(gatewayv1alpha2.Install(c.Client().Resources().GetScheme()))
 	// create dns cluster
-	if err := createCluster(ctx, c, ClusterRequest{
+	if err := createCluster(ctx, c, clusterRequest{
 		Name:      d.clusterName,
 		Namespace: d.namespace,
 		Purpose:   d.clusterPurpose,
@@ -206,7 +201,6 @@ func (d *Deployer) Deploy(ctx context.Context, c *envconf.Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to retrieve etcd IP: %w", err)
 	}
-
 	if err := d.createPlatformServiceDNS(ctx, c, etcdIP); err != nil {
 		return fmt.Errorf("failed to create platform service dns config: %w", err)
 	}
