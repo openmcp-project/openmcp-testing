@@ -41,7 +41,7 @@ spec:
       name: cluster-admin
 `
 
-type ClusterRequest struct {
+type clusterRequest struct {
 	Name      string
 	Namespace string
 	Purpose   string
@@ -53,7 +53,7 @@ type accessRequest struct {
 	RequestName string
 }
 
-func createCluster(ctx context.Context, config *envconf.Config, cr ClusterRequest) error {
+func createCluster(ctx context.Context, config *envconf.Config, cr clusterRequest) error {
 	klog.Info("create dns cluster")
 	crObj, err := resources.CreateObjectFromTemplate(ctx, config, clusterRequestTemplate, cr)
 	if err != nil {
