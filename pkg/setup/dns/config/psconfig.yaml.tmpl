@@ -1,0 +1,31 @@
+apiVersion: dns.openmcp.cloud/v1alpha1
+kind: DNSServiceConfig
+metadata:
+  name: dns
+spec:
+  externalDNSSource:
+    chartName: charts/external-dns
+    git:
+      url: https://github.com/kubernetes-sigs/external-dns
+      interval: 1h
+      ref:
+        tag: {{.ExternalDNSChartVersion}}
+  externalDNSForPurposes:
+    - purposeSelector:
+        or:
+          - name: platform
+          - name: workload
+      helmValues:
+        policy: sync
+        txtOwnerId: "<environment>.<cluster.namespace>.<cluster.name>"
+        sources:
+          - service
+          - gateway-httproute
+          - gateway-tlsroute
+        domainFilers:
+          - {{.DNSZone}}
+        provider:
+          name: coredns
+        env:
+          - name: ETCD_URLS
+            value: "http://{{.EtcdIP}}:2379"

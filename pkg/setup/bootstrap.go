@@ -9,7 +9,7 @@ import (
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	apimachinerytypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
@@ -104,10 +104,26 @@ func (s *OpenMCPSetup) cleanup(tmpFiles ...string) types.EnvFunc {
 				klog.Errorf("delete platform service failed: %v", err)
 			}
 		}
-		if err := providers.DeleteCluster(ctx, c, apimachinerytypes.NamespacedName{Namespace: s.Namespace, Name: "onboarding"},
-			s.WaitOpts...); err != nil {
-			klog.Errorf("delete cluster failed: %v", err)
+		// delete clusters
+		clusterRequests := &unstructured.UnstructuredList{}
+		clusterRequests.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "clusters.openmcp.cloud",
+			Version: "v1alpha1",
+			Kind:    "clusterrequest",
+		})
+		if err := c.Client().Resources().List(ctx, clusterRequests); err != nil {
+			klog.Errorf("failed to retrieve cluster requests: %v", err)
 		}
+		for _, clusterRequest := range clusterRequests.Items {
+			if err := resources.DeleteObject(ctx, c, &clusterRequest, s.WaitOpts...); err != nil {
+				klog.Errorf("failed to delete cluster request: %v", err)
+			}
+			if err := wait.For(conditions.New(c.Client().Resources()).
+				ResourceDeleted(&clusterRequest), s.WaitOpts...); err != nil {
+				klog.Errorf("failed to delete cluster request: %v", err)
+			}
+		}
+		// delete cluster providers
 		for _, cp := range s.ClusterProviders {
 			if err := providers.DeleteClusterProvider(ctx, c, cp.Name, cp.WaitOpts...); err != nil {
 				klog.Errorf("delete cluster provider failed: %v", err)
