@@ -43,7 +43,7 @@ type Deployer struct {
 	namespace string
 	// clusterPurpose defines the purpose that will be used to create the cluster for the dedicated dns deployment.
 	clusterPurpose string
-	// externalDNSChartVersion defines the chart version of external-dns to use with platform-servce-dns.
+	// externalDNSChartVersion defines the chart version of external-dns to use with platform-service-dns.
 	externalDNSChartVersion string
 	// platformServiceDNSVersion defines the version of platform-service-dns to use.
 	platformServiceDNSVersion string

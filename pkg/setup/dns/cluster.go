@@ -84,7 +84,7 @@ func createCluster(ctx context.Context, config *envconf.Config, cr clusterReques
 		_, found, err := unstructured.NestedFieldNoCopy(arObj.Object, "status", "secretRef")
 		return found, err
 	}); err != nil {
-		return fmt.Errorf("failed to retrieve kubeconfig to access dns cluster")
+		return fmt.Errorf("failed to retrieve kubeconfig to access dns cluster: %w", err)
 	}
 	return nil
 }

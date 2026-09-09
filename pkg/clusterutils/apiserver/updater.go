@@ -19,7 +19,7 @@ import (
 type Updater struct {
 	// The CLI to interact with the kind container. Defaults to docker, can be replaced with docker compatible CLIs like podman.
 	dockerCLI string
-	// The kind control plane to update. Defaults to the onboarcing cluster container.
+	// The kind control plane to update. Defaults to the onboarding cluster container.
 	kindContainer string
 	// The path to the api-server manifest in the kind container.
 	apiServerManifestPath string
@@ -76,7 +76,7 @@ func WithTimeout(timeout time.Duration) Option {
 // AddHostAlias adds the given hostname -> ip mapping as host alias to the kube-apiserver (static pod) manifest
 // inside a kind container and waits for the kubelet to restart the API server.
 func (u *Updater) AddHostAlias(hostname, ip string) error {
-	klog.Infof("add host %s with ip %s to /etc/hosts of the (%s) kube-apiserver", hostname, ip, u.kindContainer)
+	klog.Infof("add host alias (%s -> %s) to (%s) kube-apiserver", hostname, ip, u.kindContainer)
 	pod, err := u.getStaticPod()
 	if err != nil {
 		return err
@@ -205,6 +205,9 @@ func onboardingClusterContainer() (string, error) {
 			nodes, err := kind.ListNodes(clusterName)
 			if err != nil {
 				return "", fmt.Errorf("failed to retrieve onboarding cluster nodes: %w", err)
+			}
+			if len(nodes) == 0 {
+				return "", errors.New("failed to retrieve onboarding cluster node: no nodes listed")
 			}
 			return nodes[0].String(), nil
 		}
