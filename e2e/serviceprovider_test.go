@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/openmcp-project/openmcp-testing/pkg/conditions"
+	"github.com/openmcp-project/openmcp-testing/pkg/setup/dns"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/e2e-framework/klient/wait"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
@@ -18,6 +19,7 @@ import (
 
 func TestServiceProvider(t *testing.T) {
 	basicProviderTest := features.New("provider test").
+		Setup(dns.CreateExternalService()).
 		Setup(providers.CreateMCP("test-mcp", wait.WithTimeout(2*time.Minute))).
 		Setup(providers.ImportServiceProviderAPIs("serviceproviderobjects", wait.WithTimeout(time.Minute))).
 		Setup(providers.ImportDomainAPIs("test-mcp", "domainobjects", wait.WithTimeout(time.Minute))).
