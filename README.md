@@ -10,7 +10,15 @@ OpenMCP-testing helps to set up e2e test suites for openmcp applications. Like [
 * [`pkg/conditions`](./pkg/conditions/) provides common pre/post condition checks
 * [`pkg/providers`](./pkg/providers/) provides functionality to test cluster-providers, platform-services and service-providers
 * [`pkg/resources`](./pkg/resources/) provides functionality to (batch) import and delete resources
-* [`pkg/setup`](./pkg/setup/) provides functionality to bootstrap an openmcp environment
+* [`pkg/setup`](./pkg/setup/) provides functionality to bootstrap and verify OpenControlPlane environments
+
+## Configuration
+
+The following environment variables exist:
+
+| Variable | Description | Default |
+| -------- | ----------- | ------- |
+| ONBOARDING_KUBECONFIG | The path to the kubeconfig to interact with the onboarding API server. If not present, openmcp-testing will try to retrieve the config with [kind](https://kind.sigs.k8s.io/) | - |
 
 ## Requirements and Setup
 
@@ -19,6 +27,19 @@ You need [go](https://go.dev/) and [docker](https://www.docker.com/) to execute 
 ```shell
 go test -v ./e2e/... -count=1
 ```
+
+## Testing Against Existing Environments
+
+1. Set your current kubeconfig context to point to the OpenControlPlane [platform cluster](https://open-control-plane.io/developers/clusters-and-namespaces#cluster-overview).
+2. Set the `ONBOARDING_KUBECONFIG` environment variable to provide the onboarding cluster context.
+
+This allows you to interact with the platform and onboarding clusters without requiring any changes to an existing test suite.
+
+Use `OpenMCPSetup.Verify` instead of `OpenMCPSetup.Bootstrap` to verify that an existing environment meets the requested OpenControlPlane setup before executing your test suite.
+
+**Limitations**
+
+To interact with control plane or workload clusters in non-kind-based environments, you need to use the [ClusterAccess Library](https://github.com/openmcp-project/openmcp-operator/blob/main/docs/libraries/clusteraccess.md). `openmcp-testing` provides a utility function to convert a client retrieved through the ClusterAccess library back to an `envconfig.Config`, allowing you to create a typical e2e-framework test suite. Note that `clusterutils.MCPConfig` and `clusterutils.ConfigByPrefix` functionality only work for [cluster-provider-kind](https://github.com/openmcp-project/cluster-provider-kind) based environments (e.g. bootstrapped with [ocpctl](https://github.com/openmcp-project/ocpctl)).
 
 ## Support, Feedback, Contributing
 
