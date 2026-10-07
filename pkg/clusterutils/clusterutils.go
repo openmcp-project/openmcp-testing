@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -74,6 +75,18 @@ func ConfigByPrefix(prefix string, namespace string) (*envconf.Config, error) {
 // with the onboarding cluster and default namespace
 // In scenarios where you work with multiple onboarding clusters, use ConfigByPrefix instead
 func OnboardingConfig() (*envconf.Config, error) {
+	kubeconfigPath, present := os.LookupEnv("ONBOARDING_KUBECONFIG")
+	if present {
+		cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+		if err != nil {
+			return nil, err
+		}
+		klient, err := klient.New(cfg)
+		if err != nil {
+			return nil, err
+		}
+		return envconf.New().WithClient(klient).WithNamespace(corev1.NamespaceDefault), nil
+	}
 	return ConfigByPrefix("onboarding", corev1.NamespaceDefault)
 }
 
