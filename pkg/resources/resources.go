@@ -2,7 +2,9 @@ package resources
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -15,6 +17,30 @@ import (
 
 	"github.com/openmcp-project/openmcp-testing/internal"
 )
+
+// CreateNObjectsFromTemplateFile creates n number of objects based on a given template file.
+// Object names will be automatically iterated based on the provided count.
+// Additional adjustments can be realized by passing any number of decoder options.
+// Providing multiple resources in one file (separated by '---') will result in creating n objects of each resource.
+func CreateNObjectsFromTemplateFile(ctx context.Context, c *envconf.Config, filePath string, count int, data any, opts ...decoder.DecodeOption) error {
+	for i := 0; i < count; i++ {
+		decoderOpts := slices.Clone(opts)
+		decoderOpts = append(decoderOpts, MutateName(fmt.Sprintf("-%d", i)))
+		_, err := CreateObjectsFromTemplateFile(ctx, c, filePath, data, decoderOpts...)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// MutateNamespace is an optional parameter to decoding functions that will patch objects with the given namespace name
+func MutateName(suffix string) decoder.DecodeOption {
+	return decoder.MutateOption(func(obj k8s.Object) error {
+		obj.SetName(fmt.Sprintf("%s%s", obj.GetName(), suffix))
+		return nil
+	})
+}
 
 // DeleteObject deletes the passed in object if it exists
 func DeleteObject(ctx context.Context, c *envconf.Config, obj k8s.Object, options ...wait.Option) error {
@@ -32,12 +58,22 @@ func DeleteObject(ctx context.Context, c *envconf.Config, obj k8s.Object, option
 }
 
 // CreateObjectsFromTemplateFile creates objects by first applying the passed data to a template file on the file system
-func CreateObjectsFromTemplateFile(ctx context.Context, cfg *envconf.Config, filePath string, data interface{}) (*unstructured.UnstructuredList, error) {
+func CreateObjectsFromTemplateFile(ctx context.Context, cfg *envconf.Config, filePath string, data interface{}, options ...decoder.DecodeOption) (*unstructured.UnstructuredList, error) {
 	manifest, err := internal.ExecTemplateFile(filePath, data)
 	if err != nil {
 		return nil, err
 	}
-	return createObjectsFromManifest(ctx, cfg, manifest)
+	return createObjectsFromManifest(ctx, cfg, manifest, options...)
+}
+
+// UpdateObjectsFromTemplateFile updates objects by first applying the passed data to a template file on the file system
+func UpdateObjectsFromTemplateFile(ctx context.Context, cfg *envconf.Config, filePath string, data interface{}) error {
+	manifest, err := internal.ExecTemplateFile(filePath, data)
+	if err != nil {
+		return err
+	}
+	r := strings.NewReader(manifest)
+	return decoder.DecodeEach(ctx, r, decoder.UpdateHandler(cfg.Client().Resources()), decoder.MutateNamespace(cfg.Namespace()))
 }
 
 // CreateObjectFromTemplate creates a single object by first applying the passed in data to a template
@@ -51,20 +87,25 @@ func CreateObjectFromTemplate(ctx context.Context, cfg *envconf.Config, template
 	if err != nil {
 		return nil, err
 	}
-	err = cfg.Client().Resources().Create(ctx, obj)
-	if err != nil {
+	if err = cfg.Client().Resources().Create(ctx, obj); err != nil {
 		return nil, err
 	}
 	return obj, nil
 }
 
-func createObjectsFromManifest(ctx context.Context, cfg *envconf.Config, manifest string) (*unstructured.UnstructuredList, error) {
+func createObjectsFromManifest(ctx context.Context, cfg *envconf.Config, manifest string, options ...decoder.DecodeOption) (*unstructured.UnstructuredList, error) {
+	opts := []decoder.DecodeOption{
+		decoder.MutateNamespace(cfg.Namespace()),
+	}
+	if options != nil {
+		opts = options
+	}
 	r := strings.NewReader(manifest)
 	list := &unstructured.UnstructuredList{}
 	err := decoder.DecodeEach(ctx, r,
 		func(ctx context.Context, obj k8s.Object) error {
 			return createAndPopulateList(ctx, obj, list, cfg)
-		}, decoder.MutateNamespace(cfg.Namespace()))
+		}, opts...)
 	return list, err
 }
 
@@ -85,5 +126,8 @@ func createAndPopulateList(ctx context.Context, obj k8s.Object, list *unstructur
 	}
 	list.Items = append(list.Items, *u)
 	klog.Infof("creating object (%s) %s/%s", obj.GetObjectKind().GroupVersionKind(), obj.GetNamespace(), obj.GetName())
-	return decoder.CreateIgnoreAlreadyExists(cfg.Client().Resources())(ctx, obj)
+	if os.Getenv("RESOURCES_DRY_RUN") != "true" {
+		return decoder.CreateIgnoreAlreadyExists(cfg.Client().Resources())(ctx, obj)
+	}
+	return nil
 }

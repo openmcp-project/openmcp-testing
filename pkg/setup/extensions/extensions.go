@@ -57,4 +57,9 @@ type Extension interface {
 	//
 	// Returns an error if scheme registration fails.
 	RegisterSchemes(context.Context, *runtime.Scheme) error
+
+	// Uninstall deletes the extension from the Kubernetes cluster.
+	// This method is called during the test teardown.
+	// Returns an error if the installation fails.
+	Uninstall(context.Context, *envconf.Config) error
 }

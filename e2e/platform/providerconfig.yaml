@@ -1,0 +1,9 @@
+apiVersion: external-secrets.services.open-control-plane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: externalsecrets
+spec:
+  versions:
+    - version: "latest"
+      chartVersion: "2.14.0"
+      chartURL: oci://ghcr.io/external-secrets/charts/external-secrets
