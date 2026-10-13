@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: {{ .Namespace }}
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          image: {{ .Image }}
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+          ports:
+            - name: http
+              containerPort: 9090
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+{{ range .RemoteClusters }}
+            - name: kubeconfig-{{ .Name }}
+              mountPath: /etc/prometheus/remote/{{ .Name }}
+              readOnly: true
+{{ end }}
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+{{ range .RemoteClusters }}
+        - name: kubeconfig-{{ .Name }}
+          secret:
+            secretName: {{ .KubeconfigSecret }}
+            items:
+              - key: kubeconfig
+                path: kubeconfig
+              - key: ca.crt
+                path: ca.crt
+              - key: token
+                path: token
+{{ end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: {{ .Namespace }}
+  labels:
+    app: prometheus
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
