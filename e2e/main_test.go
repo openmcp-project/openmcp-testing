@@ -11,6 +11,7 @@ import (
 	"github.com/openmcp-project/openmcp-testing/pkg/setup"
 	"github.com/openmcp-project/openmcp-testing/pkg/setup/extensions"
 	"github.com/openmcp-project/openmcp-testing/pkg/setup/extensions/fluxcd"
+	"github.com/openmcp-project/openmcp-testing/pkg/setup/extensions/prometheus"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
@@ -56,6 +57,9 @@ func TestMain(m *testing.M) {
 		},
 		Extensions: []extensions.Extension{
 			&fluxcd.FluxCD{},
+			&prometheus.Prometheus{
+				ScrapeServiceProviders: []string{"crossplane"},
+			},
 		},
 	}
 	testenv = env.NewWithConfig(envconf.New().WithNamespace(openmcp.Namespace))
