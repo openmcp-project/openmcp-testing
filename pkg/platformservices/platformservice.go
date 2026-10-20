@@ -2,6 +2,7 @@ package platformservices
 
 import (
 	"context"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -77,4 +78,23 @@ func InstallPlatformService(ctx context.Context, c *envconf.Config, ps PlatformS
 func DeletePlatformService(ctx context.Context, c *envconf.Config, name string, opts ...wait.Option) error {
 	klog.Infof("delete platform service: %s", name)
 	return resources.DeleteObject(ctx, c, platformServiceRef(name), opts...)
+}
+
+func (s PlatformServiceSetup) Available(ctx context.Context, c *envconf.Config) error {
+	klog.Infof("validate cluster provider (%s), is available", s.Name)
+	obj := platformServiceRef(s.Name)
+	if err := wait.For(conditions.Match(obj, c, "Ready", corev1.ConditionTrue), s.WaitOpts...); err != nil {
+		return fmt.Errorf("platform service (%s) is not ready: %w", s.Name, err)
+	}
+	if err := c.Client().Resources().Get(ctx, obj.GetName(), "", obj); err != nil {
+		return fmt.Errorf("failed to retrieve platform service (%s) object: %w", s.Name, err)
+	}
+	imageValue, ok, err := unstructured.NestedString(obj.Object, "spec", "image")
+	if err != nil {
+		return fmt.Errorf("failed to extract platform service (%s) image value: %w", s.Name, err)
+	}
+	if ok && imageValue == s.Image {
+		return nil
+	}
+	return fmt.Errorf("platform service (%s) image (%s) does not match expected image: %s", s.Name, imageValue, s.Image)
 }
