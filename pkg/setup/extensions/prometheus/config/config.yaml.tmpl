@@ -7,13 +7,19 @@ data:
     global:
       scrape_interval: 30s
     scrape_configs:
-      - job_name: controller-runtime
+      - job_name: serviceprovider
         kubernetes_sd_configs:
           - role: pod
         relabel_configs:
-          - source_labels: [__meta_kubernetes_pod_name]
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
             action: keep
-            regex: {{ .Regex }}
+            regex: "ServiceProvider"
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+            action: keep
+            regex: "controller"
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_managed_by]
+            action: keep
+            regex: "openmcp-operator"
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep
             regex: "true"
@@ -21,7 +27,7 @@ data:
             target_label: namespace
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
-      - job_name: kubelet-cadvisor
+      - job_name: platform-kubelet-cadvisor
         scheme: https
         tls_config:
           insecure_skip_verify: true
@@ -39,10 +45,10 @@ data:
             target_label: __metrics_path__
             replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
         metric_relabel_configs:
-          - source_labels: [pod]
+          - source_labels: [container]
             action: keep
-            regex: {{ .Regex }}
-      - job_name: kubelet-resource
+            regex: "sp-.*|cp-.*|ps-.*"
+      - job_name: platform-kubelet-resource
         scheme: https
         tls_config:
           insecure_skip_verify: true
@@ -60,11 +66,11 @@ data:
             target_label: __metrics_path__
             replacement: /api/v1/nodes/$1/proxy/metrics/resource
         metric_relabel_configs:
-          - source_labels: [pod]
+          - source_labels: [container]
             action: keep
-            regex: {{ .Regex }}
+            regex: "sp-.*|cp-.*|ps-.*"
 {{ range .RemoteClusters }}
-      - job_name: remote-{{ .Name }}
+      - job_name: pod-metrics-{{ .Name }}
         tls_config:
           ca_file: /etc/prometheus/remote/{{ .Name }}/ca.crt
         authorization:
@@ -80,13 +86,6 @@ data:
             target_label: namespace
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
-          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
-            regex: (.+)
-            target_label: __metrics_path__
-          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
-            regex: ([^:]+)(?::\d+)?;(\d+)
-            replacement: $1:$2
-            target_label: __address__
           - target_label: cluster
             replacement: {{ .Name }}
 {{ end }}

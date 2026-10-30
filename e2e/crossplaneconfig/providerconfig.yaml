@@ -1,0 +1,15 @@
+apiVersion: crossplane.services.open-control-plane.io/v1alpha1
+kind: ProviderConfig
+metadata:
+  name: crossplane
+spec:
+  versions:
+    - version: v1.20.0
+      chart:
+        url: "ghcr.io/openmcp-project/openmcp/charts/crossplane:1.20.0" # example OCI regsitry URL for Crosslane helm chart
+        secretRef: # optional
+          name: ghcr
+      image:
+        url: "xpkg.crossplane.io/crossplane/crossplane:1.20.0" # currently, upstream location but can be private registry as well
+        secretRef: # optional
+          name: xyz

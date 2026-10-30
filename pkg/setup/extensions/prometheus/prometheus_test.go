@@ -16,9 +16,6 @@ func TestPrometheus_Install(t *testing.T) {
 			return
 		}
 		p := prometheus.Prometheus{
-			ScrapeServiceProviders: []string{
-				"externalsecretsoperator",
-			},
 			RemoteClusters: []prometheus.RemoteCluster{
 				{
 					Name:             "onboarding",

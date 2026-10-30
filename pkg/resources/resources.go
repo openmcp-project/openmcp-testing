@@ -40,6 +40,16 @@ func CreateObjectsFromTemplateFile(ctx context.Context, cfg *envconf.Config, fil
 	return createObjectsFromManifest(ctx, cfg, manifest)
 }
 
+// UpdateObjectsFromTemplateFile updates objects by first applying the passed data to a template file on the file system
+func UpdateObjectsFromTemplateFile(ctx context.Context, cfg *envconf.Config, filePath string, data interface{}) error {
+	manifest, err := internal.ExecTemplateFile(filePath, data)
+	if err != nil {
+		return err
+	}
+	r := strings.NewReader(manifest)
+	return decoder.DecodeEach(ctx, r, decoder.UpdateHandler(cfg.Client().Resources()), decoder.MutateNamespace(cfg.Namespace()))
+}
+
 // CreateObjectFromTemplate creates a single object by first applying the passed in data to a template
 func CreateObjectFromTemplate(ctx context.Context, cfg *envconf.Config, template string, data interface{}) (*unstructured.Unstructured, error) {
 	manifest, err := internal.ExecTemplate(template, data)

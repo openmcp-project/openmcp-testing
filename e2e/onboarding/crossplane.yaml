@@ -1,0 +1,10 @@
+apiVersion: crossplane.services.open-control-plane.io/v1alpha1
+kind: Crossplane
+metadata:
+  name: test
+  namespace: default
+spec:
+  version: v1.20.0 # allowed version from ProviderConfig
+  providers:
+    - name: provider-kubernetes
+      version: v0.16.0 # allowed version from ProviderConfig
