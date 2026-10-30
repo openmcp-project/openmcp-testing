@@ -5,7 +5,7 @@ go 1.27.3
 require (
 	github.com/fluxcd/flux2/v2 v2.9.6
 	github.com/fluxcd/helm-controller/api v1.7.0
-	github.com/fluxcd/kustomize-controller/api v1.9.6
+	github.com/fluxcd/kustomize-controller/api v1.10.0
 	github.com/fluxcd/source-controller/api v1.10.0
 	github.com/openmcp-project/openmcp-operator/api v1.4.4
 	github.com/stretchr/testify v1.12.1
