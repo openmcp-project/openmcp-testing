@@ -7,7 +7,7 @@ data:
     global:
       scrape_interval: 30s
     scrape_configs:
-      - job_name: serviceprovider
+      - job_name: serviceprovider-metrics
         kubernetes_sd_configs:
           - role: pod
         relabel_configs:
@@ -27,28 +27,7 @@ data:
             target_label: namespace
           - source_labels: [__meta_kubernetes_pod_name]
             target_label: pod
-      - job_name: platform-kubelet-cadvisor
-        scheme: https
-        tls_config:
-          insecure_skip_verify: true
-        authorization:
-          credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
-        metrics_path: /metrics/cadvisor
-        kubernetes_sd_configs:
-          - role: node
-        relabel_configs:
-          - action: labelmap
-            regex: __meta_kubernetes_node_label_(.+)
-          - target_label: __address__
-            replacement: kubernetes.default.svc:443
-          - source_labels: [__meta_kubernetes_node_name]
-            target_label: __metrics_path__
-            replacement: /api/v1/nodes/$1/proxy/metrics/cadvisor
-        metric_relabel_configs:
-          - source_labels: [container]
-            action: keep
-            regex: "sp-.*|cp-.*|ps-.*"
-      - job_name: platform-kubelet-resource
+      - job_name: platform-kubelet-metrics
         scheme: https
         tls_config:
           insecure_skip_verify: true
@@ -70,7 +49,7 @@ data:
             action: keep
             regex: "sp-.*|cp-.*|ps-.*"
 {{ range .RemoteClusters }}
-      - job_name: pod-metrics-{{ .Name }}
+      - job_name: {{ .Name }}-container-metrics
         tls_config:
           ca_file: /etc/prometheus/remote/{{ .Name }}/ca.crt
         authorization:
@@ -88,4 +67,26 @@ data:
             target_label: pod
           - target_label: cluster
             replacement: {{ .Name }}
+      - job_name: {{ .Name }}-kubelet-metrics
+        scheme: https
+        tls_config:
+          ca_file: /etc/prometheus/remote/{{ .Name }}/ca.crt
+        authorization:
+          credentials_file: /etc/prometheus/remote/{{ .Name }}/token
+        metrics_path: /metrics/resource
+        kubernetes_sd_configs:
+          - role: node
+            kubeconfig_file: /etc/prometheus/remote/{{ .Name }}/kubeconfig
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: {{ .APIServer }}
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/$1/proxy/metrics/resource
+        metric_relabel_configs:
+          - source_labels: [container]
+            action: keep
+            regex: {{ .ContainerRegex }}
 {{ end }}

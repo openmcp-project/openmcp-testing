@@ -12,6 +12,13 @@ Functional:
 - Monitoring Service Providers (default) by scraping the platform cluster.
 - Monitoring Domain Services by additionally scraping for workload or control plane cluster.
 
+## Metrics Overview
+
+The prometheus extension is configured to collect the following metrics per target cluster (platform and optional remote clusters):
+
+- metrics provided by an application like [controller-runtime metrics](https://book.kubebuilder.io/reference/metrics-reference.html) and [prometheus go client collector metrics](https://github.com/prometheus/client_golang)
+- metrics provided by the [kubelet](https://kubernetes.io/docs/reference/instrumentation/metrics/) (/metrics/resource)
+
 ## Service Provider Testing Example
 
 1. Add the prometheus extension to your OpenMCPSetup:

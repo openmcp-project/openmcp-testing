@@ -1,0 +1,6 @@
+apiVersion: external-secrets.services.open-control-plane.io/v1alpha1
+kind: ExternalSecretsOperator
+metadata:
+  name: test
+spec:
+  version: "latest"

@@ -15,15 +15,7 @@ func TestPrometheus_Install(t *testing.T) {
 			t.Errorf("config failed: %v", err)
 			return
 		}
-		p := prometheus.Prometheus{
-			RemoteClusters: []prometheus.RemoteCluster{
-				{
-					Name:             "onboarding",
-					KubeconfigSecret: "managedcontrolplane--onboarding.kubeconfig",
-					SecretNamespace:  "openmcp-system",
-				},
-			},
-		}
+		p := prometheus.Prometheus{}
 		gotErr := p.Install(t.Context(), cfg)
 		if gotErr != nil {
 			t.Errorf("Install() failed: %v", gotErr)

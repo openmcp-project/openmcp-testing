@@ -104,6 +104,11 @@ func (s *OpenMCPSetup) cleanup(tmpFiles ...string) types.EnvFunc {
 				klog.Errorf("delete platform service failed: %v", err)
 			}
 		}
+		for _, e := range s.Extensions {
+			if err := e.Uninstall(ctx, c); err != nil {
+				klog.Errorf("failed to delete extension (%s): %v", e.Name(), err)
+			}
+		}
 		// delete clusters
 		clusterRequests := &unstructured.UnstructuredList{}
 		clusterRequests.SetGroupVersionKind(schema.GroupVersionKind{

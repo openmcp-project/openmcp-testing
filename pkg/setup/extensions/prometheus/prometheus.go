@@ -5,8 +5,8 @@ import (
 	"embed"
 	"encoding/base64"
 	"fmt"
-	"slices"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +18,7 @@ import (
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/k8s"
 	"sigs.k8s.io/e2e-framework/klient/wait"
+	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
@@ -39,8 +40,8 @@ var configFS embed.FS
 
 var _ extensions.Extension = Prometheus{}
 
-// RemoteCluster describes an additional cluster to scrape.
-type RemoteCluster struct {
+// remoteCluster describes an additional cluster to scrape.
+type remoteCluster struct {
 	// Name is a unique (prometheus) label applied to metrics from this cluster (cluster="<Name>").
 	Name string
 	// KubeconfigSecret is the name of the Secret (in SecretNamespace) whose "kubeconfig" key holds
@@ -51,7 +52,11 @@ type RemoteCluster struct {
 	SecretNamespace string
 	// ContainerRegex defines the container filter for cAdvisor metrics,
 	// eg "sp-.*|foo" drops any metrics of containers where the container name is not "foo" or starts with "sp-".
+	// Defaults to ".*".
 	ContainerRegex string
+	// APIServer is the host:port endpoint used to proxy kubelet metrics (see prometheus config template).
+	// The value is populated automatically based on the kubeconfig of the requested cluster access.
+	APIServer string
 }
 
 type TargetCluster struct {
@@ -62,14 +67,26 @@ type TargetCluster struct {
 }
 
 type Prometheus struct {
-	// Version defines the Prometheus version to install.
-	// If empty, defaults to "v3.4.1".
-	Version string
 	// Namespace is the Kubernetes namespace where Prometheus will be installed.
 	// If empty, defaults to "monitoring".
 	Namespace string
-	// RemoteClusters lists additional clusters whose pods Prometheus should scrape.
-	RemoteClusters []RemoteCluster
+}
+
+// Uninstall implements [extensions.Extension].
+func (p Prometheus) Uninstall(ctx context.Context, cfg *envconf.Config) error {
+	klog.Info("uninstalling prometheus...")
+	namespace := p.Namespace
+	if namespace == "" {
+		namespace = defaultNamespace
+	}
+	obj := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+	if err := cfg.Client().Resources(namespace).Delete(ctx, obj); err != nil {
+		return err
+	}
+	if err := wait.For(conditions.New(cfg.Client().Resources()).ResourceDeleted(obj)); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Name implements [extensions.Extension].
@@ -84,25 +101,16 @@ func (p Prometheus) Install(ctx context.Context, cfg *envconf.Config) error {
 	if namespace == "" {
 		namespace = defaultNamespace
 	}
-	version := p.Version
-	if version == "" {
-		version = defaultVersion
-	}
 	if err := createIfNotExists(ctx, cfg, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}); err != nil {
 		return err
 	}
 	if err := rbac(ctx, cfg, namespace); err != nil {
 		return err
 	}
-	for _, rc := range p.RemoteClusters {
-		if err := createPrometheusJobSecret(ctx, cfg, types.NamespacedName{Name: rc.KubeconfigSecret, Namespace: rc.SecretNamespace}, types.NamespacedName{Name: rc.KubeconfigSecret, Namespace: p.Namespace}); err != nil {
-			return err
-		}
-	}
-	if err := configMap(ctx, cfg, namespace, false, p.RemoteClusters); err != nil {
+	if err := configMap(ctx, cfg, namespace); err != nil {
 		return err
 	}
-	if err := deployment(ctx, cfg, namespace, version, false, p.RemoteClusters); err != nil {
+	if err := deployment(ctx, cfg, namespace); err != nil {
 		return err
 	}
 	klog.Infof("prometheus installed successfully in namespace %s", namespace)
@@ -125,23 +133,20 @@ func createIfNotExists(ctx context.Context, cfg *envconf.Config, obj k8s.Object)
 
 // createPrometheusJobSecret reads the cluster kubeconfigs from a source namespace and creates a copy in a destination namespace so the Prometheus pod can mount it.
 // A secret copy additional contains "ca.crt" and "token" keys based on the kubeconfig to use in the prometheus config.
-//
-// TODO: Instead of copying fixed secrets the idea is to expose a function for devs to add a workload or control plane cluster scrape config on demand
-// by passing the cluster name which results in creating an access requests with the set of required permissions (see prometheus rbac), calling
-// calling this secret transformation function, updating the config and reloading prometheus (e.g. using reloader).
-func createPrometheusJobSecret(ctx context.Context, cfg *envconf.Config, srcRef, dest types.NamespacedName) error {
+// It returns the remote cluster's API server host (host:port) extracted from the kubeconfig.
+func createPrometheusJobSecret(ctx context.Context, cfg *envconf.Config, srcRef, dest types.NamespacedName) (string, error) {
 	src := &corev1.Secret{}
 	if err := cfg.Client().Resources(srcRef.Namespace).Get(ctx, srcRef.Name, srcRef.Namespace, src); err != nil {
-		return fmt.Errorf("failed to get kubeconfig secret %s: %w", srcRef, err)
+		return "", fmt.Errorf("failed to get kubeconfig secret %s: %w", srcRef, err)
 	}
 
 	kubeconfigBytes, ok := src.Data["kubeconfig"]
 	if !ok {
-		return fmt.Errorf("kubeconfig secret %s has no kubeconfig key", srcRef)
+		return "", fmt.Errorf("kubeconfig secret %s has no kubeconfig key", srcRef)
 	}
 	restConfig, err := clientcmd.RESTConfigFromKubeConfig(kubeconfigBytes)
 	if err != nil {
-		return fmt.Errorf("failed to parse kubeconfig from secret %s: %w", srcRef, err)
+		return "", fmt.Errorf("failed to parse kubeconfig from secret %s: %w", srcRef, err)
 	}
 
 	var caData []byte
@@ -149,12 +154,12 @@ func createPrometheusJobSecret(ctx context.Context, cfg *envconf.Config, srcRef,
 	case len(restConfig.CAData) > 0:
 		caData = restConfig.CAData
 	case restConfig.CAFile != "":
-		return fmt.Errorf("kubeconfig secret %s references a CA file path which is not supported in-cluster", srcRef)
+		return "", fmt.Errorf("kubeconfig secret %s references a CA file path which is not supported in-cluster", srcRef)
 	}
 
 	tokenBytes := []byte(restConfig.BearerToken)
 	if len(tokenBytes) == 0 && restConfig.BearerTokenFile != "" {
-		return fmt.Errorf("kubeconfig secret %s references a bearer token file path which is not supported in-cluster", srcRef)
+		return "", fmt.Errorf("kubeconfig secret %s references a bearer token file path which is not supported in-cluster", srcRef)
 	}
 	if len(tokenBytes) == 0 {
 		// Try base64-decoding in case the token is stored encoded (some generators do this)
@@ -183,7 +188,7 @@ func createPrometheusJobSecret(ctx context.Context, cfg *envconf.Config, srcRef,
 		Data: data,
 		Type: src.Type,
 	}
-	return createIfNotExists(ctx, cfg, copy)
+	return strings.TrimPrefix(restConfig.Host, "https://"), createIfNotExists(ctx, cfg, copy)
 }
 
 func rbac(ctx context.Context, c *envconf.Config, namespace string) error {
@@ -199,14 +204,19 @@ func rbac(ctx context.Context, c *envconf.Config, namespace string) error {
 	return nil
 }
 
-func configMap(ctx context.Context, c *envconf.Config, namespace string, update bool, remoteClusters []RemoteCluster) error {
+func configMap(ctx context.Context, c *envconf.Config, namespace string, remoteClusters ...remoteCluster) error {
 	configTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/config.yaml.tmpl")
+	for i := range remoteClusters {
+		if remoteClusters[i].ContainerRegex == "" {
+			remoteClusters[i].ContainerRegex = ".*"
+		}
+	}
 	templateData := struct {
-		RemoteClusters []RemoteCluster
+		RemoteClusters []remoteCluster
 	}{
 		RemoteClusters: remoteClusters,
 	}
-	if update {
+	if len(remoteClusters) > 0 {
 		if err := resources.UpdateObjectsFromTemplateFile(ctx, c.WithNamespace(namespace), configTemplate, templateData); err != nil {
 			return fmt.Errorf("failed to update prometheus config: %w", err)
 		}
@@ -218,18 +228,18 @@ func configMap(ctx context.Context, c *envconf.Config, namespace string, update 
 	return nil
 }
 
-func deployment(ctx context.Context, c *envconf.Config, namespace, version string, update bool, remoteClusters []RemoteCluster) error {
+func deployment(ctx context.Context, c *envconf.Config, namespace string, remoteClusters ...remoteCluster) error {
 	deployTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/deployment.yaml.tmpl")
 	templateData := struct {
 		Namespace      string
 		Image          string
-		RemoteClusters []RemoteCluster
+		RemoteClusters []remoteCluster
 	}{
 		Namespace:      namespace,
-		Image:          defaultImage + ":" + version,
+		Image:          defaultImage + ":" + defaultVersion,
 		RemoteClusters: remoteClusters,
 	}
-	if update {
+	if len(remoteClusters) > 0 {
 		if err := resources.UpdateObjectsFromTemplateFile(ctx, c.WithNamespace(namespace), deployTemplate, templateData); err != nil {
 			return fmt.Errorf("failed to update prometheus deployment: %w", err)
 		}
@@ -237,6 +247,16 @@ func deployment(ctx context.Context, c *envconf.Config, namespace, version strin
 		if _, err := resources.CreateObjectsFromTemplateFile(ctx, c.WithNamespace(namespace), deployTemplate, templateData); err != nil {
 			return fmt.Errorf("failed to create prometheus deployment: %w", err)
 		}
+	}
+	klog.Info("waiting for prometheus to be ready")
+	if err := wait.For(conditions.New(c.Client().Resources()).DeploymentAvailable("prometheus", promtoolJobNamespace)); err != nil {
+		return fmt.Errorf("prometheus deployment not available: %w", err)
+	}
+	// wait 2 scrape intervals to ensure most queries will work (probably better to keep this out of the setup but let the user determine the wait interval)
+	select {
+	case <-time.After(scrapeInterval * 2):
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 	return nil
 }
@@ -255,7 +275,7 @@ spec:
     permissions:
     - rules:
       - apiGroups: [""]
-        resources: ["pods"]
+        resources: ["pods", "nodes", "nodes/metrics", "nodes/proxy"]
         verbs: ["get", "list", "watch"]
 `
 
@@ -266,13 +286,9 @@ func (p Prometheus) AddClusters(ctx context.Context, cfg *envconf.Config, target
 	if namespace == "" {
 		namespace = defaultNamespace
 	}
-	version := p.Version
-	if version == "" {
-		version = defaultVersion
-	}
-
-	var additionalClusters []RemoteCluster
+	var additionalClusters []remoteCluster
 	for _, tc := range targetClusters {
+		klog.Info("request access to scrape additional clusters")
 		// 1. lookup cluster request based on TargetCluster.Name
 		cr, err := findClusterRequest(ctx, cfg, tc.Name)
 		if err != nil {
@@ -309,23 +325,24 @@ func (p Prometheus) AddClusters(ctx context.Context, cfg *envconf.Config, target
 		// 3. create a new secret based on the access request kubeconfig that can be used scrape the given cluster
 		secretName, _, _ := unstructured.NestedString(arObj.Object, "status", "secretRef", "name")
 		promSecretName := secretName + ".prom"
-		rc := RemoteCluster{
+		apiServer, err := createPrometheusJobSecret(ctx, cfg, types.NamespacedName{Name: secretName, Namespace: namespace}, types.NamespacedName{Name: promSecretName, Namespace: namespace})
+		if err != nil {
+			return fmt.Errorf("failed to copy kubeconfig secret for cluster %s: %w", tc.Name, err)
+		}
+		rc := remoteCluster{
 			Name:             tc.Label,
 			KubeconfigSecret: promSecretName,
-		}
-		if err := createPrometheusJobSecret(ctx, cfg, types.NamespacedName{Name: secretName, Namespace: namespace}, types.NamespacedName{Name: promSecretName, Namespace: namespace}); err != nil {
-			return fmt.Errorf("failed to copy kubeconfig secret for cluster %s: %w", tc.Name, err)
+			APIServer:        apiServer,
 		}
 		additionalClusters = append(additionalClusters, rc)
 	}
 
-	allRemoteClusters := slices.Concat(p.RemoteClusters, additionalClusters)
-
+	klog.Info("update prometheus config and reload prometheus")
 	// when all cluster secrets have been created: update the prometheus config and deployment to mount any additional remote cluster secrets
-	if err := configMap(ctx, cfg, namespace, true, allRemoteClusters); err != nil {
+	if err := configMap(ctx, cfg, namespace, additionalClusters...); err != nil {
 		return fmt.Errorf("failed to update prometheus config: %w", err)
 	}
-	if err := deployment(ctx, cfg, namespace, version, true, allRemoteClusters); err != nil {
+	if err := deployment(ctx, cfg, namespace, additionalClusters...); err != nil {
 		return fmt.Errorf("failed to update prometheus deployment: %w", err)
 	}
 	return nil
