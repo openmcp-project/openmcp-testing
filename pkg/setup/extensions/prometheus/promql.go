@@ -26,9 +26,13 @@ const (
 )
 
 type ObservabilityWindow struct {
-	Start         time.Time
-	End           time.Time
+	Start time.Time
+	End   time.Time
+	// todo move placeholders out of window or rename to query config or something similar
+	// kubelet metrics attribute
 	ContainerName string
+	// controller runtime metrics attribute
+	Controller string
 }
 
 // duration returns the window size as a Prometheus duration string (e.g. "900s").
@@ -82,12 +86,12 @@ var (
 	ControllerRuntimeAverageReconcileTime = NamedQuery{
 		Name:        "average reconcile time (seconds)",
 		Description: "Mean time spent inside the Reconcile function per controller over the window. Tracks overall reconcile performance; pair with p99 to detect outliers hidden by the average.",
-		Query:       `rate(controller_runtime_reconcile_time_seconds_sum{container="$container"}[$window]) / rate(controller_runtime_reconcile_time_seconds_count{container="$container"}[$window])`,
+		Query:       `rate(controller_runtime_reconcile_time_seconds_sum{controller="$controller"}[$window]) / rate(controller_runtime_reconcile_time_seconds_count{controller="$controller"}[$window])`,
 	}
 	MaxWorkqueueDepth = NamedQuery{
 		Name:        "workqueue depth",
 		Description: "Peak number of items waiting in the work queue over the window. The earliest leading indicator of a processing backlog — rises before reconcile latency or error rate does.",
-		Query:       `max_over_time(workqueue_depth{container="$container"}[$window])`,
+		Query:       `max_over_time(workqueue_depth{controller="$controller"}[$window])`,
 	}
 )
 
@@ -97,6 +101,8 @@ var AllQueries = []NamedQuery{
 	OpenControlPlaneMeanTimeToUpdate,
 	ContainerAverageCPUUsage,
 	ContainerAverageMemoryUsage,
+	ControllerRuntimeAverageReconcileTime,
+	MaxWorkqueueDepth,
 }
 
 type QueryConfig struct {
@@ -202,6 +208,7 @@ func promtoolJob(version string, queries []NamedQuery, window ObservabilityWindo
 	for _, q := range queries {
 		pql := strings.ReplaceAll(q.Query, "$window", window.duration())
 		pql = strings.ReplaceAll(pql, "$container", window.ContainerName)
+		pql = strings.ReplaceAll(pql, "$controller", window.Controller)
 		fmt.Fprintf(&sb, "echo '%s'\n", q.Name)
 		fmt.Fprintf(&sb, "promtool query instant -o json %s %q\n", promtoolEndpoint, pql)
 	}
