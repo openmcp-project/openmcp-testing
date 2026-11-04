@@ -46,8 +46,8 @@ func TestAddClusters(t *testing.T) {
 		// dummy query etcd metrics
 		Assess("benchmark service provider (eso)", benchmark("sp-externalsecrets", prometheus.AllQueries)).
 		Assess("benchmark domain service (eso)", benchmark("external-secrets", []prometheus.NamedQuery{
-			prometheus.QueryAverageContainerCPU,
-			prometheus.QueryAverageContainerMemoryMiB,
+			prometheus.ContainerAverageCPUUsage,
+			prometheus.ContainerAverageMemoryUsage,
 		}))
 
 	testenv.Test(t, addClusters.Feature())

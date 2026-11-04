@@ -70,6 +70,7 @@ func ConfigByPrefix(prefix string, namespace string) (*envconf.Config, error) {
 	return envconf.New().WithClient(client).WithNamespace(namespace), nil
 }
 
+
 // OnboardingConfig is a utility function to return an environment config to work
 // with the onboarding cluster and default namespace
 // In scenarios where you work with multiple onboarding clusters, use ConfigByPrefix instead

@@ -69,15 +69,25 @@ var (
 		Description: "Average time spent until a resource reaches state ready after spec changes, including reconcile lag caused by invalid configuration or the controller not being available, etc.",
 		Query:       "rate(opencontrolplane_runtime_resource_update_seconds_sum[$window])/rate(opencontrolplane_runtime_resource_update_seconds_count[$window])",
 	}
-	QueryAverageContainerCPU = NamedQuery{
+	ContainerAverageCPUUsage = NamedQuery{
 		Name:        "average container cpu usage (cores)",
 		Description: "Average CPU consumption of the container over the observation window, expressed in fractional cores. Use to right-size CPU requests and spot sustained saturation.",
 		Query:       `rate(container_cpu_usage_seconds_total{container="$container"}[$window])`,
 	}
-	QueryAverageContainerMemoryMiB = NamedQuery{
+	ContainerAverageMemoryUsage = NamedQuery{
 		Name:        "average container memory usage (MiB)",
 		Description: "Average working-set memory of the container over the observation window in MiB. Working-set excludes reclaimable page cache and is the value kubelet compares against the memory limit.",
 		Query:       `avg_over_time(container_memory_working_set_bytes{container="$container"}[$window]) / (1024*1024)`,
+	}
+	ControllerRuntimeAverageReconcileTime = NamedQuery{
+		Name:        "average reconcile time (seconds)",
+		Description: "Mean time spent inside the Reconcile function per controller over the window. Tracks overall reconcile performance; pair with p99 to detect outliers hidden by the average.",
+		Query:       `rate(controller_runtime_reconcile_time_seconds_sum{container="$container"}[$window]) / rate(controller_runtime_reconcile_time_seconds_count{container="$container"}[$window])`,
+	}
+	MaxWorkqueueDepth = NamedQuery{
+		Name:        "workqueue depth",
+		Description: "Peak number of items waiting in the work queue over the window. The earliest leading indicator of a processing backlog — rises before reconcile latency or error rate does.",
+		Query:       `max_over_time(workqueue_depth{container="$container"}[$window])`,
 	}
 )
 
@@ -85,8 +95,8 @@ var (
 var AllQueries = []NamedQuery{
 	OpenControlPlaneMeanTimeToCreate,
 	OpenControlPlaneMeanTimeToUpdate,
-	QueryAverageContainerCPU,
-	QueryAverageContainerMemoryMiB,
+	ContainerAverageCPUUsage,
+	ContainerAverageMemoryUsage,
 }
 
 type QueryConfig struct {

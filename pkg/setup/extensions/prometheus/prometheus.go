@@ -79,8 +79,10 @@ func (p Prometheus) Uninstall(ctx context.Context, cfg *envconf.Config) error {
 	if namespace == "" {
 		namespace = defaultNamespace
 	}
+	// todo: accessrequest created with add cluster have to be deleted before deleting a control plane / workload cluster
+	// otherwise delete namespace will be hanging because because cp-kind won't remove the finalizer from the ar
 	obj := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
-	if err := cfg.Client().Resources(namespace).Delete(ctx, obj); err != nil {
+	if err := cfg.Client().Resources().Delete(ctx, obj); err != nil {
 		return err
 	}
 	if err := wait.For(conditions.New(cfg.Client().Resources()).ResourceDeleted(obj)); err != nil {
@@ -136,7 +138,7 @@ func createIfNotExists(ctx context.Context, cfg *envconf.Config, obj k8s.Object)
 // It returns the remote cluster's API server host (host:port) extracted from the kubeconfig.
 func createPrometheusJobSecret(ctx context.Context, cfg *envconf.Config, srcRef, dest types.NamespacedName) (string, error) {
 	src := &corev1.Secret{}
-	if err := cfg.Client().Resources(srcRef.Namespace).Get(ctx, srcRef.Name, srcRef.Namespace, src); err != nil {
+	if err := cfg.Client().Resources().Get(ctx, srcRef.Name, srcRef.Namespace, src); err != nil {
 		return "", fmt.Errorf("failed to get kubeconfig secret %s: %w", srcRef, err)
 	}
 
@@ -198,7 +200,7 @@ func rbac(ctx context.Context, c *envconf.Config, namespace string) error {
 	}{
 		Namespace: namespace,
 	}
-	if _, err := resources.CreateObjectsFromTemplateFile(ctx, c.WithNamespace(namespace), rbacTemplate, templateData); err != nil {
+	if _, err := resources.CreateObjectsFromTemplateFile(ctx, newConfigWithNamespace(c, namespace), rbacTemplate, templateData); err != nil {
 		return fmt.Errorf("failed to create prometheus rbac: %w", err)
 	}
 	return nil
@@ -217,11 +219,11 @@ func configMap(ctx context.Context, c *envconf.Config, namespace string, remoteC
 		RemoteClusters: remoteClusters,
 	}
 	if len(remoteClusters) > 0 {
-		if err := resources.UpdateObjectsFromTemplateFile(ctx, c.WithNamespace(namespace), configTemplate, templateData); err != nil {
+		if err := resources.UpdateObjectsFromTemplateFile(ctx, newConfigWithNamespace(c, namespace), configTemplate, templateData); err != nil {
 			return fmt.Errorf("failed to update prometheus config: %w", err)
 		}
 	} else {
-		if _, err := resources.CreateObjectsFromTemplateFile(ctx, c.WithNamespace(namespace), configTemplate, templateData); err != nil {
+		if _, err := resources.CreateObjectsFromTemplateFile(ctx, newConfigWithNamespace(c, namespace), configTemplate, templateData); err != nil {
 			return fmt.Errorf("failed create prometheus config: %w", err)
 		}
 	}
@@ -231,20 +233,18 @@ func configMap(ctx context.Context, c *envconf.Config, namespace string, remoteC
 func deployment(ctx context.Context, c *envconf.Config, namespace string, remoteClusters ...remoteCluster) error {
 	deployTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/deployment.yaml.tmpl")
 	templateData := struct {
-		Namespace      string
 		Image          string
 		RemoteClusters []remoteCluster
 	}{
-		Namespace:      namespace,
 		Image:          defaultImage + ":" + defaultVersion,
 		RemoteClusters: remoteClusters,
 	}
 	if len(remoteClusters) > 0 {
-		if err := resources.UpdateObjectsFromTemplateFile(ctx, c.WithNamespace(namespace), deployTemplate, templateData); err != nil {
+		if err := resources.UpdateObjectsFromTemplateFile(ctx, newConfigWithNamespace(c, namespace), deployTemplate, templateData); err != nil {
 			return fmt.Errorf("failed to update prometheus deployment: %w", err)
 		}
 	} else {
-		if _, err := resources.CreateObjectsFromTemplateFile(ctx, c.WithNamespace(namespace), deployTemplate, templateData); err != nil {
+		if _, err := resources.CreateObjectsFromTemplateFile(ctx, newConfigWithNamespace(c, namespace), deployTemplate, templateData); err != nil {
 			return fmt.Errorf("failed to create prometheus deployment: %w", err)
 		}
 	}
@@ -305,7 +305,7 @@ func (p Prometheus) AddClusters(ctx context.Context, cfg *envconf.Config, target
 			ClusterRequestNamespace: cr.GetNamespace(),
 			Namespace:               namespace,
 		}
-		arObj, err := resources.CreateObjectFromTemplate(ctx, cfg.WithNamespace(namespace), accessRequestTemplate, arData)
+		arObj, err := resources.CreateObjectFromTemplate(ctx, newConfigWithNamespace(cfg, namespace), accessRequestTemplate, arData)
 		if err != nil {
 			return fmt.Errorf("failed to create access request for cluster %s: %w", tc.Name, err)
 		}
@@ -365,4 +365,8 @@ func findClusterRequest(ctx context.Context, cfg *envconf.Config, name string) (
 		}
 	}
 	return nil, fmt.Errorf("cluster request %q not found", name)
+}
+
+func newConfigWithNamespace(cfg *envconf.Config, namespace string) *envconf.Config {
+	return envconf.New().WithClient(cfg.Client()).WithNamespace(namespace)
 }
