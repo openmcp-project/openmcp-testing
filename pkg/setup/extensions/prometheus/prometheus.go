@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -252,12 +251,6 @@ func deployment(ctx context.Context, c *envconf.Config, namespace string, remote
 	if err := wait.For(conditions.New(c.Client().Resources()).DeploymentAvailable("prometheus", promtoolJobNamespace)); err != nil {
 		return fmt.Errorf("prometheus deployment not available: %w", err)
 	}
-	// wait 2 scrape intervals to ensure most queries will work (probably better to keep this out of the setup but let the user determine the wait interval)
-	select {
-	case <-time.After(scrapeInterval * 2):
-	case <-ctx.Done():
-		return ctx.Err()
-	}
 	return nil
 }
 
@@ -275,7 +268,7 @@ spec:
     permissions:
     - rules:
       - apiGroups: [""]
-        resources: ["pods", "nodes", "nodes/metrics", "nodes/proxy"]
+        resources: ["pods", "pods/proxy", "nodes", "nodes/metrics", "nodes/proxy"]
         verbs: ["get", "list", "watch"]
 `
 
@@ -369,4 +362,30 @@ func findClusterRequest(ctx context.Context, cfg *envconf.Config, name string) (
 
 func newConfigWithNamespace(cfg *envconf.Config, namespace string) *envconf.Config {
 	return envconf.New().WithClient(cfg.Client()).WithNamespace(namespace)
+}
+
+// Cleanup deletes all AccessRequests in p.Namespace
+func (p Prometheus) Cleanup(ctx context.Context, cfg *envconf.Config) error {
+	namespace := p.Namespace
+	if namespace == "" {
+		namespace = defaultNamespace
+	}
+	list := &unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "clusters.openmcp.cloud",
+		Version: "v1alpha1",
+		Kind:    "AccessRequestList",
+	})
+	if err := cfg.Client().Resources(namespace).List(ctx, list); err != nil {
+		klog.Errorf("cleanup: failed to list access requests in namespace %s: %v", namespace, err)
+		return err
+	}
+	for i := range list.Items {
+		ar := &list.Items[i]
+		if err := cfg.Client().Resources(namespace).Delete(ctx, ar); err != nil {
+			klog.Errorf("cleanup: failed to delete access request %s/%s: %v", namespace, ar.GetName(), err)
+			return err
+		}
+	}
+	return nil
 }

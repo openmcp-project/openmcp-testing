@@ -50,6 +50,7 @@ data:
             regex: "sp-.*|cp-.*|ps-.*"
 {{ range .RemoteClusters }}
       - job_name: {{ .Name }}-container-metrics
+        scheme: https
         tls_config:
           ca_file: /etc/prometheus/remote/{{ .Name }}/ca.crt
         authorization:
@@ -67,6 +68,16 @@ data:
             target_label: pod
           - target_label: cluster
             replacement: {{ .Name }}
+          - target_label: __address__
+            replacement: {{ .APIServer }}
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_pod_name]
+            regex: (.+);(.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/namespaces/$1/pods/$2/proxy/metrics
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_pod_name, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            regex: (.+);(.+);(.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/namespaces/$1/pods/$2:$3/proxy/metrics
       - job_name: {{ .Name }}-kubelet-metrics
         scheme: https
         tls_config:

@@ -64,12 +64,12 @@ func (r QueryResult) String() string {
 // Predefined queries. $window and $contrainer are replaced in Query with values from ObservabilityWindow.
 var (
 	OpenControlPlaneMeanTimeToCreate = NamedQuery{
-		Name:        "average create time to ready",
+		Name:        "average create time to ready (seconds)",
 		Description: "Average time spent until a resource reaches state ready for the first time, including reconcile lag caused by invalid configuration or the controller not being available, etc.",
 		Query:       "rate(opencontrolplane_runtime_resource_create_seconds_sum[$window])/rate(opencontrolplane_runtime_resource_create_seconds_count[$window])",
 	}
 	OpenControlPlaneMeanTimeToUpdate = NamedQuery{
-		Name:        "average update time to ready",
+		Name:        "average update time to ready (seconds)",
 		Description: "Average time spent until a resource reaches state ready after spec changes, including reconcile lag caused by invalid configuration or the controller not being available, etc.",
 		Query:       "rate(opencontrolplane_runtime_resource_update_seconds_sum[$window])/rate(opencontrolplane_runtime_resource_update_seconds_count[$window])",
 	}
@@ -89,7 +89,7 @@ var (
 		Query:       `rate(controller_runtime_reconcile_time_seconds_sum{controller="$controller"}[$window]) / rate(controller_runtime_reconcile_time_seconds_count{controller="$controller"}[$window])`,
 	}
 	MaxWorkqueueDepth = NamedQuery{
-		Name:        "workqueue depth",
+		Name:        "max workqueue depth",
 		Description: "Peak number of items waiting in the work queue over the window. The earliest leading indicator of a processing backlog — rises before reconcile latency or error rate does.",
 		Query:       `max_over_time(workqueue_depth{controller="$controller"}[$window])`,
 	}

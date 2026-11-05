@@ -48,7 +48,7 @@ type FluxCD struct {
 
 // Uninstall implements [extensions.Extension].
 func (f FluxCD) Uninstall(context.Context, *envconf.Config) error {
-	// TODO
+	// currently nil to prevent unintentionally uninstalling flux when running against real environments
 	return nil
 }
 
