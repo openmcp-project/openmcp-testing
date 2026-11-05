@@ -12,6 +12,14 @@ OpenMCP-testing helps to set up e2e test suites for openmcp applications. Like [
 * [`pkg/resources`](./pkg/resources/) provides functionality to (batch) import and delete resources
 * [`pkg/setup`](./pkg/setup/) provides functionality to bootstrap an openmcp environment
 
+## Configuration
+
+The following environment variables exist:
+
+| Variable | Description | Default |
+| -------- | ----------- | ------- |
+| ONBOARDING_KUBECONFIG | The path to the kubeconfig to interact with the onboarding API server. If not present, openmcp-testing will try to retrieve the config with [kind](https://kind.sigs.k8s.io/) | - |
+
 ## Requirements and Setup
 
 You need [go](https://go.dev/) and [docker](https://www.docker.com/) to execute the sample test suite.
