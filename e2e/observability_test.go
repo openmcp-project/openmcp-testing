@@ -20,24 +20,9 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/features"
 )
 
-// TestServiceProviderObservability demonstrates how to use the prometheus extension to benchmark a service provider
+// TestServiceProviderObservability demonstrates how to use the prometheus extension to benchmark a service provider (or domain service)
 func TestServiceProviderObservability(t *testing.T) {
-	observabilityTest := features.New("observability").
-		Setup(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-			klog.Info("waiting one scrape interval")
-			select {
-			case <-time.After(time.Second * 30):
-			case <-ctx.Done():
-			}
-			return ctx
-		}).
-		Assess("average container cpu and memory usage", benchmark("sp-externalsecrets", "externalsecrets", prometheus.AllQueries))
-	testenv.Test(t, observabilityTest.Feature())
-}
-
-// TestAddClusters demonstrates how to use the prometheus extension to benchmark a domain service
-func TestAddClusters(t *testing.T) {
-	addClusters := features.New("addClusters").
+	observability := features.New("observability").
 		Setup(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 			if _, err := clusterutils.ImportToPlatformCluster(ctx, c, "platform"); err != nil {
 				t.Fatalf("provider config import failed: %v", err)
@@ -100,7 +85,7 @@ func TestAddClusters(t *testing.T) {
 			prometheus.ContainerAverageMemoryUsage,
 		}))
 
-	testenv.Test(t, addClusters.Feature())
+	testenv.Test(t, observability.Feature())
 }
 
 func benchmark(container string, controller string, queries []prometheus.NamedQuery) features.Func {
