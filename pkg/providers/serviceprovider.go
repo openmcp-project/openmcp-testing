@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -33,6 +34,25 @@ type ServiceProviderSetup struct {
 	WaitOpts []wait.Option
 	// LoadImageToCluster allows using local images that have to be loaded into the kind cluster
 	LoadImageToCluster bool
+}
+
+func (s ServiceProviderSetup) Available(ctx context.Context, c *envconf.Config) error {
+	klog.Infof("validate service provider (%s), is available", s.Name)
+	obj := serviceProviderRef(s.Name)
+	if err := wait.For(conditions.Match(obj, c, "Ready", corev1.ConditionTrue), s.WaitOpts...); err != nil {
+		return fmt.Errorf("service provider (%s) is not ready: %w", s.Name, err)
+	}
+	if err := c.Client().Resources().Get(ctx, obj.GetName(), "", obj); err != nil {
+		return fmt.Errorf("failed to retrieve service provider (%s): %w", s.Name, err)
+	}
+	imageValue, ok, err := unstructured.NestedString(obj.Object, "spec", "image")
+	if err != nil {
+		return fmt.Errorf("failed to extract service provider (%s) image: %w", s.Name, err)
+	}
+	if ok && imageValue == s.Image {
+		return nil
+	}
+	return fmt.Errorf("service provider (%s) image (%s) does not match expected image: %s", s.Name, imageValue, s.Image)
 }
 
 func serviceProviderRef(name string) *unstructured.Unstructured {
