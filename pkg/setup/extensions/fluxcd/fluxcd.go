@@ -46,6 +46,12 @@ type FluxCD struct {
 	Namespace string
 }
 
+// Uninstall implements [extensions.Extension].
+func (f FluxCD) Uninstall(context.Context, *envconf.Config) error {
+	// currently nil to prevent unintentionally uninstalling flux when running against real environments
+	return nil
+}
+
 // Name returns the unique identifier for this extension.
 func (f *FluxCD) Name() string {
 	return "fluxcd"

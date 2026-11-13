@@ -1,0 +1,15 @@
+apiVersion: core.open-control-plane.io/v2alpha1
+kind: ControlPlane
+metadata:
+  name: test
+  namespace: default
+spec:
+  iam: {}
+---
+apiVersion: external-secrets.services.open-control-plane.io/v1alpha1
+kind: ExternalSecretsOperator
+metadata:
+  name: test
+  namespace: default
+spec:
+  version: "latest"

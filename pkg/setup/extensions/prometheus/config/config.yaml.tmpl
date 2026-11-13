@@ -1,0 +1,103 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 30s
+    scrape_configs:
+      - job_name: serviceprovider-metrics
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+            action: keep
+            regex: "ServiceProvider"
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_component]
+            action: keep
+            regex: "controller"
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_managed_by]
+            action: keep
+            regex: "openmcp-operator"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+      - job_name: platform-kubelet-metrics
+        scheme: https
+        tls_config:
+          insecure_skip_verify: true
+        authorization:
+          credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        metrics_path: /metrics/resource
+        kubernetes_sd_configs:
+          - role: node
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: kubernetes.default.svc:443
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/$1/proxy/metrics/resource
+        metric_relabel_configs:
+          - source_labels: [container]
+            action: keep
+            regex: "sp-.*|cp-.*|ps-.*"
+{{ range .RemoteClusters }}
+      - job_name: {{ .Name }}-container-metrics
+        scheme: https
+        tls_config:
+          ca_file: /etc/prometheus/remote/{{ .Name }}/ca.crt
+        authorization:
+          credentials_file: /etc/prometheus/remote/{{ .Name }}/token
+        kubernetes_sd_configs:
+          - role: pod
+            kubeconfig_file: /etc/prometheus/remote/{{ .Name }}/kubeconfig
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+          - target_label: cluster
+            replacement: {{ .Name }}
+          - target_label: __address__
+            replacement: {{ .APIServer }}
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_pod_name]
+            regex: (.+);(.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/namespaces/$1/pods/$2/proxy/metrics
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_pod_name, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            regex: (.+);(.+);(.+)
+            target_label: __metrics_path__
+            replacement: /api/v1/namespaces/$1/pods/$2:$3/proxy/metrics
+      - job_name: {{ .Name }}-kubelet-metrics
+        scheme: https
+        tls_config:
+          ca_file: /etc/prometheus/remote/{{ .Name }}/ca.crt
+        authorization:
+          credentials_file: /etc/prometheus/remote/{{ .Name }}/token
+        metrics_path: /metrics/resource
+        kubernetes_sd_configs:
+          - role: node
+            kubeconfig_file: /etc/prometheus/remote/{{ .Name }}/kubeconfig
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+          - target_label: __address__
+            replacement: {{ .APIServer }}
+          - source_labels: [__meta_kubernetes_node_name]
+            target_label: __metrics_path__
+            replacement: /api/v1/nodes/$1/proxy/metrics/resource
+        metric_relabel_configs:
+          - source_labels: [container]
+            action: keep
+            regex: {{ .ContainerRegex }}
+{{ end }}
