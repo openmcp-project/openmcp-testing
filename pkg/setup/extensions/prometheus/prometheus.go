@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -37,7 +39,7 @@ const (
 //go:embed config/*
 var configFS embed.FS
 
-var _ extensions.Extension = Prometheus{}
+var _ extensions.Extension = &Prometheus{}
 
 // remoteCluster describes an additional cluster to scrape.
 type remoteCluster struct {
@@ -69,57 +71,80 @@ type Prometheus struct {
 	// Namespace is the Kubernetes namespace where Prometheus will be installed.
 	// If empty, defaults to "monitoring".
 	Namespace string
+	// If empty, defaults to "openmcp-testing" to prevent conflicts with existing resources when testing agains real environments
+	ClusterResourceSuffix string
+}
+
+func (p *Prometheus) applyDefaults() {
+	if p.Namespace == "" {
+		p.Namespace = defaultNamespace
+	}
+	if p.ClusterResourceSuffix == "" {
+		p.ClusterResourceSuffix = "openmcp-testing"
+	}
 }
 
 // Uninstall implements [extensions.Extension].
-func (p Prometheus) Uninstall(ctx context.Context, cfg *envconf.Config) error {
+func (p *Prometheus) Uninstall(ctx context.Context, cfg *envconf.Config) error {
 	klog.Info("uninstalling prometheus...")
-	namespace := p.Namespace
-	if namespace == "" {
-		namespace = defaultNamespace
+	p.applyDefaults()
+	if err := p.cleanupAccess(ctx, cfg); err != nil {
+		return err
 	}
-	// todo: accessrequest created with add cluster have to be deleted before deleting a control plane / workload cluster
-	// otherwise delete namespace will be hanging because because cp-kind won't remove the finalizer from the ar
-	obj := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+	obj := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: p.Namespace}}
 	if err := cfg.Client().Resources().Delete(ctx, obj); err != nil {
 		return err
 	}
 	if err := wait.For(conditions.New(cfg.Client().Resources()).ResourceDeleted(obj)); err != nil {
 		return err
 	}
+	// cleanup rbac
+	rbacv1.AddToScheme(cfg.Client().Resources().GetScheme())
+	name := "prometheus-" + p.ClusterResourceSuffix
+	if err := deleteIfTestingResource(ctx, &rbacv1.ClusterRoleBinding{Name: name}, cfg); err != nil {
+		return err
+	}
+	return deleteIfTestingResource(ctx, &rbacv1.ClusterRole{Name: name}, cfg)
+}
+
+func deleteIfTestingResource(ctx context.Context, role k8s.Object, cfg *envconf.Config) error {
+	if err := cfg.Client().Resources().Get(ctx, role.GetName(), "", role); err == nil {
+		if _, ok := role.GetLabels()[resources.CreatedByKey]; ok {
+			if err := cfg.Client().Resources().Delete(ctx, role); err != nil && !errors.IsNotFound(err) {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
 // Name implements [extensions.Extension].
-func (p Prometheus) Name() string {
+func (p *Prometheus) Name() string {
 	return "prometheus"
 }
 
 // Install implements [extensions.Extension].
-func (p Prometheus) Install(ctx context.Context, cfg *envconf.Config) error {
+func (p *Prometheus) Install(ctx context.Context, cfg *envconf.Config) error {
 	klog.Info("installing prometheus...")
-	namespace := p.Namespace
-	if namespace == "" {
-		namespace = defaultNamespace
-	}
-	if err := createIfNotExists(ctx, cfg, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}); err != nil {
+	p.applyDefaults()
+	if err := createIfNotExists(ctx, cfg, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: p.Namespace}}); err != nil {
 		return err
 	}
-	if err := rbac(ctx, cfg, namespace); err != nil {
+	if err := p.rbacIfNotExists(ctx, cfg); err != nil {
 		return err
 	}
-	if err := configMap(ctx, cfg, namespace); err != nil {
+	if err := p.configMap(ctx, cfg); err != nil {
 		return err
 	}
-	if err := deployment(ctx, cfg, namespace); err != nil {
+	if err := p.deployment(ctx, cfg); err != nil {
 		return err
 	}
-	klog.Infof("prometheus installed successfully in namespace %s", namespace)
+	klog.Infof("prometheus installed successfully in namespace %s", p.Namespace)
 	return nil
 }
 
 // RegisterSchemes implements [extensions.Extension].
-func (p Prometheus) RegisterSchemes(_ context.Context, _ *runtime.Scheme) error {
+func (p *Prometheus) RegisterSchemes(_ context.Context, _ *runtime.Scheme) error {
 	return nil
 }
 
@@ -192,20 +217,33 @@ func createPrometheusJobSecret(ctx context.Context, cfg *envconf.Config, srcRef,
 	return strings.TrimPrefix(restConfig.Host, "https://"), createIfNotExists(ctx, cfg, copy)
 }
 
-func rbac(ctx context.Context, c *envconf.Config, namespace string) error {
+func (p *Prometheus) rbacIfNotExists(ctx context.Context, c *envconf.Config) error {
 	rbacTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/rbac.yaml.tmpl")
 	templateData := struct {
 		Namespace string
+		Suffix    string
 	}{
-		Namespace: namespace,
+		Namespace: p.Namespace,
+		Suffix:    p.ClusterResourceSuffix,
 	}
-	if _, err := resources.CreateObjectsFromTemplateFile(ctx, newConfigWithNamespace(c, namespace), rbacTemplate, templateData); err != nil {
+	// Check if a ClusterRole with this name already exists would risk tampering with roles on real environments.
+	name := "prometheus-" + p.ClusterResourceSuffix
+	role := &rbacv1.ClusterRole{}
+	rbacv1.AddToScheme(c.Client().Resources().GetScheme())
+	if err := c.Client().Resources().Get(ctx, name, "", role); err == nil {
+		return fmt.Errorf("ClusterRole %q already exists; set a unique ClusterResourceSuffix to avoid conflicts with existing roles", name)
+	}
+	binding := &rbacv1.ClusterRoleBinding{}
+	if err := c.Client().Resources().Get(ctx, name, "", binding); err == nil {
+		return fmt.Errorf("ClusterRoleBinding %q already exists; set a unique ClusterResourceSuffix to avoid conflicts with existing bindings", name)
+	}
+	if _, err := resources.CreateObjectsFromTemplateFile(ctx, newConfigWithNamespace(c, p.Namespace), rbacTemplate, templateData); err != nil {
 		return fmt.Errorf("failed to create prometheus rbac: %w", err)
 	}
 	return nil
 }
 
-func configMap(ctx context.Context, c *envconf.Config, namespace string, remoteClusters ...remoteCluster) error {
+func (p *Prometheus) configMap(ctx context.Context, c *envconf.Config, remoteClusters ...remoteCluster) error {
 	configTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/config.yaml.tmpl")
 	for i := range remoteClusters {
 		if remoteClusters[i].ContainerRegex == "" {
@@ -218,18 +256,18 @@ func configMap(ctx context.Context, c *envconf.Config, namespace string, remoteC
 		RemoteClusters: remoteClusters,
 	}
 	if len(remoteClusters) > 0 {
-		if err := resources.UpdateObjectsFromTemplateFile(ctx, newConfigWithNamespace(c, namespace), configTemplate, templateData); err != nil {
+		if err := resources.UpdateObjectsFromTemplateFile(ctx, newConfigWithNamespace(c, p.Namespace), configTemplate, templateData); err != nil {
 			return fmt.Errorf("failed to update prometheus config: %w", err)
 		}
 	} else {
-		if _, err := resources.CreateObjectsFromTemplateFile(ctx, newConfigWithNamespace(c, namespace), configTemplate, templateData); err != nil {
+		if _, err := resources.CreateObjectsFromTemplateFile(ctx, newConfigWithNamespace(c, p.Namespace), configTemplate, templateData); err != nil {
 			return fmt.Errorf("failed create prometheus config: %w", err)
 		}
 	}
 	return nil
 }
 
-func deployment(ctx context.Context, c *envconf.Config, namespace string, remoteClusters ...remoteCluster) error {
+func (p *Prometheus) deployment(ctx context.Context, c *envconf.Config, remoteClusters ...remoteCluster) error {
 	deployTemplate := internal.MustTmpFileFromEmbedFS(configFS, "config/deployment.yaml.tmpl")
 	templateData := struct {
 		Image          string
@@ -239,11 +277,11 @@ func deployment(ctx context.Context, c *envconf.Config, namespace string, remote
 		RemoteClusters: remoteClusters,
 	}
 	if len(remoteClusters) > 0 {
-		if err := resources.UpdateObjectsFromTemplateFile(ctx, newConfigWithNamespace(c, namespace), deployTemplate, templateData); err != nil {
+		if err := resources.UpdateObjectsFromTemplateFile(ctx, newConfigWithNamespace(c, p.Namespace), deployTemplate, templateData); err != nil {
 			return fmt.Errorf("failed to update prometheus deployment: %w", err)
 		}
 	} else {
-		if _, err := resources.CreateObjectsFromTemplateFile(ctx, newConfigWithNamespace(c, namespace), deployTemplate, templateData); err != nil {
+		if _, err := resources.CreateObjectsFromTemplateFile(ctx, newConfigWithNamespace(c, p.Namespace), deployTemplate, templateData); err != nil {
 			return fmt.Errorf("failed to create prometheus deployment: %w", err)
 		}
 	}
@@ -274,11 +312,8 @@ spec:
 
 // AddClusters adds a scrape job to the prometheus config for each given TargetCluster.
 // For each cluster it creates an AccessRequest in the Prometheus namespace and updates the ConfigMap and Prometheus deployment to mount every remote kubeconfig.
-func (p Prometheus) AddClusters(ctx context.Context, cfg *envconf.Config, targetClusters ...TargetCluster) error {
-	namespace := p.Namespace
-	if namespace == "" {
-		namespace = defaultNamespace
-	}
+func (p *Prometheus) AddClusters(ctx context.Context, cfg *envconf.Config, targetClusters ...TargetCluster) error {
+	p.applyDefaults()
 	var additionalClusters []remoteCluster
 	for _, tc := range targetClusters {
 		klog.Info("request access to scrape additional clusters")
@@ -296,9 +331,9 @@ func (p Prometheus) AddClusters(ctx context.Context, cfg *envconf.Config, target
 		}{
 			ClusterRequestName:      cr.GetName(),
 			ClusterRequestNamespace: cr.GetNamespace(),
-			Namespace:               namespace,
+			Namespace:               p.Namespace,
 		}
-		arObj, err := resources.CreateObjectFromTemplate(ctx, newConfigWithNamespace(cfg, namespace), accessRequestTemplate, arData)
+		arObj, err := resources.CreateObjectFromTemplate(ctx, newConfigWithNamespace(cfg, p.Namespace), accessRequestTemplate, arData)
 		if err != nil {
 			return fmt.Errorf("failed to create access request for cluster %s: %w", tc.Name, err)
 		}
@@ -318,7 +353,7 @@ func (p Prometheus) AddClusters(ctx context.Context, cfg *envconf.Config, target
 		// 3. create a new secret based on the access request kubeconfig that can be used scrape the given cluster
 		secretName, _, _ := unstructured.NestedString(arObj.Object, "status", "secretRef", "name")
 		promSecretName := secretName + ".prom"
-		apiServer, err := createPrometheusJobSecret(ctx, cfg, types.NamespacedName{Name: secretName, Namespace: namespace}, types.NamespacedName{Name: promSecretName, Namespace: namespace})
+		apiServer, err := createPrometheusJobSecret(ctx, cfg, types.NamespacedName{Name: secretName, Namespace: p.Namespace}, types.NamespacedName{Name: promSecretName, Namespace: p.Namespace})
 		if err != nil {
 			return fmt.Errorf("failed to copy kubeconfig secret for cluster %s: %w", tc.Name, err)
 		}
@@ -332,10 +367,10 @@ func (p Prometheus) AddClusters(ctx context.Context, cfg *envconf.Config, target
 
 	klog.Info("update prometheus config and reload prometheus")
 	// when all cluster secrets have been created: update the prometheus config and deployment to mount any additional remote cluster secrets
-	if err := configMap(ctx, cfg, namespace, additionalClusters...); err != nil {
+	if err := p.configMap(ctx, cfg, additionalClusters...); err != nil {
 		return fmt.Errorf("failed to update prometheus config: %w", err)
 	}
-	if err := deployment(ctx, cfg, namespace, additionalClusters...); err != nil {
+	if err := p.deployment(ctx, cfg, additionalClusters...); err != nil {
 		return fmt.Errorf("failed to update prometheus deployment: %w", err)
 	}
 	return nil
@@ -364,26 +399,22 @@ func newConfigWithNamespace(cfg *envconf.Config, namespace string) *envconf.Conf
 	return envconf.New().WithClient(cfg.Client()).WithNamespace(namespace)
 }
 
-// Cleanup deletes all AccessRequests in p.Namespace
-func (p Prometheus) Cleanup(ctx context.Context, cfg *envconf.Config) error {
-	namespace := p.Namespace
-	if namespace == "" {
-		namespace = defaultNamespace
-	}
+// cleanupAccess deletes all AccessRequests in p.Namespace
+func (p *Prometheus) cleanupAccess(ctx context.Context, cfg *envconf.Config) error {
 	list := &unstructured.UnstructuredList{}
 	list.SetGroupVersionKind(schema.GroupVersionKind{
 		Group:   "clusters.openmcp.cloud",
 		Version: "v1alpha1",
 		Kind:    "AccessRequestList",
 	})
-	if err := cfg.Client().Resources(namespace).List(ctx, list); err != nil {
-		klog.Errorf("cleanup: failed to list access requests in namespace %s: %v", namespace, err)
+	if err := cfg.Client().Resources(p.Namespace).List(ctx, list); err != nil {
+		klog.Errorf("cleanup: failed to list access requests in namespace %s: %v", p.Namespace, err)
 		return err
 	}
 	for i := range list.Items {
 		ar := &list.Items[i]
-		if err := cfg.Client().Resources(namespace).Delete(ctx, ar); err != nil {
-			klog.Errorf("cleanup: failed to delete access request %s/%s: %v", namespace, ar.GetName(), err)
+		if err := cfg.Client().Resources(p.Namespace).Delete(ctx, ar); err != nil {
+			klog.Errorf("cleanup: failed to delete access request %s/%s: %v", p.Namespace, ar.GetName(), err)
 			return err
 		}
 	}

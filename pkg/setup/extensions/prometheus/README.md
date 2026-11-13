@@ -79,3 +79,26 @@ Setup(func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context
 ## Reference Usage
 
 Both scenarios are covered in [e2e test](../../../../e2e/observability_test.go)
+
+## Testing Against Existing Environments
+
+Use the extension directly instead of bootstrapping an OpenControlPlane enviroment.
+
+```go
+promExt := prometheus.Prometheus{}
+testenv = env.NewWithConfig(envconf.New().WithNamespace(openmcp.Namespace))
+testenv.Setup(func(ctx context.Context, c *envconf.Config) (context.Context, error) {
+	if err := promExt.Install(ctx, c); err != nil {
+		return nil, err
+	}
+	return ctx, nil
+}).Finish(func(ctx context.Context, c *envconf.Config) (context.Context, error) {
+	if err := promExt.Uninstall(ctx, c); err != nil {
+		return nil, err
+	}
+	return ctx, nil
+})
+os.Exit(testenv.Run(m))
+```
+
+It is recommended to verify that an environment meets an expected configuration by using `openMCPSetup.Verify`.

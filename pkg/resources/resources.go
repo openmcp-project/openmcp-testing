@@ -18,6 +18,11 @@ import (
 	"github.com/openmcp-project/openmcp-testing/internal"
 )
 
+const (
+	CreatedByKey   = "testing.open-control-plane.io/created-by"
+	CreatedByValue = "openmcp-testing"
+)
+
 // CreateNObjectsFromTemplateFile creates n number of objects based on a given template file.
 // Object names will be automatically iterated based on the provided count.
 // Additional adjustments can be realized by passing any number of decoder options.
@@ -40,6 +45,22 @@ func MutateName(suffix string) decoder.DecodeOption {
 		obj.SetName(fmt.Sprintf("%s%s", obj.GetName(), suffix))
 		return nil
 	})
+}
+
+func openmcpTestingLabels() decoder.DecodeOption {
+	return decoder.MutateLabels(map[string]string{
+		CreatedByKey: CreatedByValue,
+	})
+}
+
+// required for label setting on unstructured.Unstructured
+func applyOpenmcpTestingLabels(obj k8s.Object) {
+	labels := obj.GetLabels()
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	labels[CreatedByKey] = CreatedByValue
+	obj.SetLabels(labels)
 }
 
 // DeleteObject deletes the passed in object if it exists
@@ -73,7 +94,7 @@ func UpdateObjectsFromTemplateFile(ctx context.Context, cfg *envconf.Config, fil
 		return err
 	}
 	r := strings.NewReader(manifest)
-	return decoder.DecodeEach(ctx, r, decoder.UpdateHandler(cfg.Client().Resources()), decoder.MutateNamespace(cfg.Namespace()))
+	return decoder.DecodeEach(ctx, r, decoder.UpdateHandler(cfg.Client().Resources()), decoder.MutateNamespace(cfg.Namespace()), openmcpTestingLabels())
 }
 
 // CreateObjectFromTemplate creates a single object by first applying the passed in data to a template
@@ -87,6 +108,7 @@ func CreateObjectFromTemplate(ctx context.Context, cfg *envconf.Config, template
 	if err != nil {
 		return nil, err
 	}
+	applyOpenmcpTestingLabels(obj)
 	if err = cfg.Client().Resources().Create(ctx, obj); err != nil {
 		return nil, err
 	}
@@ -97,9 +119,8 @@ func createObjectsFromManifest(ctx context.Context, cfg *envconf.Config, manifes
 	opts := []decoder.DecodeOption{
 		decoder.MutateNamespace(cfg.Namespace()),
 	}
-	if options != nil {
-		opts = options
-	}
+	opts = append(opts, options...)
+	opts = append(opts, openmcpTestingLabels())
 	r := strings.NewReader(manifest)
 	list := &unstructured.UnstructuredList{}
 	err := decoder.DecodeEach(ctx, r,
@@ -115,7 +136,7 @@ func CreateObjectsFromDir(ctx context.Context, cfg *envconf.Config, dir string) 
 	err := decoder.DecodeEachFile(ctx, os.DirFS(dir), "*",
 		func(ctx context.Context, obj k8s.Object) error {
 			return createAndPopulateList(ctx, obj, list, cfg)
-		}, decoder.MutateNamespace(cfg.Namespace()))
+		}, decoder.MutateNamespace(cfg.Namespace()), openmcpTestingLabels())
 	return list, err
 }
 
@@ -124,6 +145,7 @@ func createAndPopulateList(ctx context.Context, obj k8s.Object, list *unstructur
 	if err != nil {
 		return err
 	}
+	applyOpenmcpTestingLabels(obj)
 	list.Items = append(list.Items, *u)
 	klog.Infof("creating object (%s) %s/%s", obj.GetObjectKind().GroupVersionKind(), obj.GetNamespace(), obj.GetName())
 	if os.Getenv("RESOURCES_DRY_RUN") != "true" {
