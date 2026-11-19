@@ -2,6 +2,7 @@ package clusterutils
 
 import (
 	"context"
+	_ "embed"
 	"testing"
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
@@ -16,24 +17,10 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
 
-const fakeKubeconfig = `
-apiVersion: v1
-kind: Config
-clusters:
-- name: test-cluster
-  cluster:
-    server: https://127.0.0.1:6443
-contexts:
-- name: test-context
-  context:
-    cluster: test-cluster
-    user: test-user
-current-context: test-context
-users:
-- name: test-user
-  user:
-    token: fake-token
-`
+//go:embed testdata/kubeconfig
+var fakeKubeconfigBytes []byte
+
+var fakeKubeconfig = string(fakeKubeconfigBytes)
 
 var _ ClusterProvider = fakeClusterProvider{}
 
@@ -127,6 +114,59 @@ func TestMCPConfig(t *testing.T) {
 			if tt.wantErr != nil {
 				t.Fatal("MCPConfig() succeeded unexpectedly")
 			}
+		})
+	}
+}
+
+func TestConfigByEnv(t *testing.T) {
+	const envKey = "TEST_KUBECONFIG"
+	const namespace = "test-ns"
+
+	tests := []struct {
+		name      string
+		setupEnv  func(t *testing.T)
+		namespace string
+		wantErr   bool
+	}{
+		{
+			name: "env variable present",
+			setupEnv: func(t *testing.T) {
+				t.Setenv(envKey, "testdata/kubeconfig")
+			},
+			namespace: namespace,
+			wantErr:   false,
+		},
+		{
+			name: "env variable points to non-existing kubeconfig",
+			setupEnv: func(t *testing.T) {
+				t.Setenv(envKey, "testdata/doesnotexit")
+			},
+			namespace: namespace,
+			wantErr:   true,
+		},
+		{
+			name:      "env variable not present",
+			setupEnv:  func(t *testing.T) {},
+			namespace: namespace,
+			wantErr:   true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setupEnv(t)
+			got, gotErr := ConfigByEnv(envKey, tt.namespace)
+			if gotErr != nil {
+				if !tt.wantErr {
+					t.Errorf("ConfigByEnv() failed: %v", gotErr)
+				}
+				return
+			}
+			if tt.wantErr {
+				t.Fatal("ConfigByEnv() succeeded unexpectedly")
+			}
+			assert.NotNil(t, got)
+			assert.NotNil(t, got.Client())
+			assert.Equal(t, tt.namespace, got.Namespace())
 		})
 	}
 }

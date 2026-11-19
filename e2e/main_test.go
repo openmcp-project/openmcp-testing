@@ -11,20 +11,23 @@ import (
 	"github.com/openmcp-project/openmcp-testing/pkg/setup"
 	"github.com/openmcp-project/openmcp-testing/pkg/setup/extensions"
 	"github.com/openmcp-project/openmcp-testing/pkg/setup/extensions/fluxcd"
+	"github.com/openmcp-project/openmcp-testing/pkg/setup/extensions/prometheus"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 )
 
 var testenv env.Environment
+var promExt prometheus.Prometheus
 
 func TestMain(m *testing.M) {
 	initLogging()
+	promExt = prometheus.Prometheus{}
 	openmcp := setup.OpenMCPSetup{
 		Namespace: "openmcp-system",
 		Operator: setup.OpenMCPOperatorSetup{
 			Name:         "openmcp-operator",
-			Image:        "ghcr.io/openmcp-project/images/openmcp-operator:v1.3.0",
+			Image:        "ghcr.io/openmcp-project/images/openmcp-operator:v1.4.4",
 			Environment:  "debug",
 			PlatformName: "platform",
 			ExtraClusterPurposeMapping: []providers.ClusterPurposeMapping{
@@ -38,24 +41,25 @@ func TestMain(m *testing.M) {
 		ClusterProviders: []providers.ClusterProviderSetup{
 			{
 				Name:  "kind",
-				Image: "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.6.0",
+				Image: "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.7.4",
 			},
 		},
 		ServiceProviders: []providers.ServiceProviderSetup{
 			{
-				Name:  "crossplane",
-				Image: "ghcr.io/openmcp-project/images/service-provider-crossplane:v1.2.0",
+				Name:  "externalsecrets",
+				Image: "ghcr.io/openmcp-project/images/service-provider-external-secrets:v1.2.5",
 			},
 		},
 		PlatformServices: []platformservices.PlatformServiceSetup{
 			{
 				Name:                      "gateway",
-				Image:                     "ghcr.io/openmcp-project/images/platform-service-gateway:v0.0.10",
+				Image:                     "ghcr.io/openmcp-project/images/platform-service-gateway:v0.2.8",
 				PlatformServiceConfigsDir: "platformservice-gateway",
 			},
 		},
 		Extensions: []extensions.Extension{
 			&fluxcd.FluxCD{},
+			&promExt,
 		},
 	}
 	testenv = env.NewWithConfig(envconf.New().WithNamespace(openmcp.Namespace))

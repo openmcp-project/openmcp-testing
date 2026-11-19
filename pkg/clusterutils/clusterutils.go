@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -75,6 +76,23 @@ func ConfigByPrefix(prefix string, namespace string) (*envconf.Config, error) {
 // In scenarios where you work with multiple onboarding clusters, use ConfigByPrefix instead
 func OnboardingConfig() (*envconf.Config, error) {
 	return ConfigByPrefix("onboarding", corev1.NamespaceDefault)
+}
+
+// ConfigByEnv creates a new environment config based on an environment variable that references a kubeconfig.
+func ConfigByEnv(envKey, namespace string) (*envconf.Config, error) {
+	kubeconfigPath, present := os.LookupEnv(envKey)
+	if present {
+		cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+		if err != nil {
+			return nil, err
+		}
+		klient, err := klient.New(cfg)
+		if err != nil {
+			return nil, err
+		}
+		return envconf.New().WithClient(klient).WithNamespace(namespace), nil
+	}
+	return nil, fmt.Errorf("env variable %q not present", envKey)
 }
 
 // McpConfig is a utility function to return an environment config to work
