@@ -222,3 +222,22 @@ func DeleteCluster(ctx context.Context, c *envconf.Config, ref types.NamespacedN
 	}
 	return nil
 }
+
+func (s ClusterProviderSetup) Available(ctx context.Context, c *envconf.Config) error {
+	klog.Infof("validate cluster provider (%s), is available", s.Name)
+	obj := clusterProviderRef(s.Name)
+	if err := wait.For(openmcpconditions.Match(obj, c, "Ready", corev1.ConditionTrue), s.WaitOpts...); err != nil {
+		return fmt.Errorf("cluster provider (%s) is not ready: %w", s.Name, err)
+	}
+	if err := c.Client().Resources().Get(ctx, obj.GetName(), "", obj); err != nil {
+		return fmt.Errorf("failed to retrieve cluster provider (%s): %w", s.Name, err)
+	}
+	imageValue, ok, err := unstructured.NestedString(obj.Object, "spec", "image")
+	if err != nil {
+		return fmt.Errorf("failed to extract cluster provider (%s) image: %w", s.Name, err)
+	}
+	if ok && imageValue == s.Image {
+		return nil
+	}
+	return fmt.Errorf("cluster provider (%s) image (%s) does not match expected image: %s", s.Name, imageValue, s.Image)
+}
