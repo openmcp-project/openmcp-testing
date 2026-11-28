@@ -3,10 +3,10 @@ module github.com/openmcp-project/openmcp-testing
 go 1.27.3
 
 require (
-	github.com/fluxcd/flux2/v2 v2.10.0
-	github.com/fluxcd/helm-controller/api v1.7.1
-	github.com/fluxcd/kustomize-controller/api v1.10.1
-	github.com/fluxcd/source-controller/api v1.10.1
+	github.com/fluxcd/flux2/v2 v2.10.1
+	github.com/fluxcd/helm-controller/api v1.7.2
+	github.com/fluxcd/kustomize-controller/api v1.10.2
+	github.com/fluxcd/source-controller/api v1.10.2
 	github.com/openmcp-project/openmcp-operator/api v1.4.5
 	github.com/stretchr/testify v1.12.1
 	k8s.io/api v0.37.2
